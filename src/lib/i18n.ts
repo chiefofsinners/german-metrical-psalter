@@ -20,6 +20,8 @@ export const STRINGS = {
       `Composing… ${s}s elapsed. Long psalms may take a minute or two.`,
     streamingWaiting: (s: number) =>
       `Waiting for first token… ${s}s (reasoning models often pause 30–120s before writing).`,
+    streamingThinking: (count: number, s: number) =>
+      `Thinking… ${count.toLocaleString()} reasoning chunks in ${s}s`,
     streamingChars: (chars: number, s: number) =>
       `Receiving… ${chars.toLocaleString()} chars in ${s}s`,
     showRaw: "Show raw stream",
@@ -47,6 +49,8 @@ export const STRINGS = {
       `Komponiere… ${s}s vergangen. Lange Psalmen brauchen ein paar Minuten.`,
     streamingWaiting: (s: number) =>
       `Warte auf erstes Token… ${s}s (Reasoning-Modelle denken oft 30–120s, bevor sie schreiben).`,
+    streamingThinking: (count: number, s: number) =>
+      `Denke nach… ${count.toLocaleString()} Reasoning-Chunks in ${s}s`,
     streamingChars: (chars: number, s: number) =>
       `Empfange… ${chars.toLocaleString()} Zeichen in ${s}s`,
     showRaw: "Rohdaten anzeigen",

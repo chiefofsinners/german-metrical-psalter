@@ -92,6 +92,10 @@ export async function POST(req: NextRequest) {
           userPrompt: buildUserPrompt(psalm, hebrew, variants),
           schema: OUTPUT_SCHEMA,
           onChunk: (delta) => send({ type: "chunk", delta }),
+          onReasoning: (count) => {
+            // Throttle: only emit every 10 reasoning chunks.
+            if (count % 10 === 0) send({ type: "thinking", count });
+          },
         });
         console.log(
           `[generate] done in ${Date.now() - t0}ms, stop_reason=${result.stopReason}, usage=`,

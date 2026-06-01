@@ -42,6 +42,7 @@ export interface GenerateInput {
   userPrompt: string;
   schema: object;
   onChunk?: (delta: string) => void;
+  onReasoning?: (chunkCount: number) => void;
 }
 
 export interface GenerateOutput {
@@ -148,25 +149,60 @@ async function generateOpenAICompat(
         }
       : { type: "json_object" },
     stream: true,
-    stream_options: { include_usage: true },
+    // OpenAI-specific extension that DeepSeek's compat endpoint may not honor.
+    ...(provider === "deepseek"
+      ? {}
+      : { stream_options: { include_usage: true } }),
   });
 
   let text = "";
   let finishReason = "unknown";
   let usage = { input_tokens: 0, output_tokens: 0 };
   let firstTokenAt: number | null = null;
+  let firstReasoningAt: number | null = null;
   let tokenChunks = 0;
+  let reasoningChunks = 0;
+  let chunkIndex = 0;
 
   for await (const chunk of stream) {
+    chunkIndex++;
     const choice = chunk.choices[0];
-    if (choice?.delta?.content) {
+    const delta = choice?.delta as
+      | { content?: string; reasoning_content?: string }
+      | undefined;
+
+    if (chunkIndex === 1) {
+      console.log(
+        `[${provider}] first chunk after ${Date.now() - t0}ms, delta keys:`,
+        delta ? Object.keys(delta) : "no delta"
+      );
+    }
+
+    if (delta?.reasoning_content) {
+      if (firstReasoningAt === null) {
+        firstReasoningAt = Date.now() - t0;
+        console.log(`[${provider}] reasoning started after ${firstReasoningAt}ms`);
+      }
+      reasoningChunks++;
+      if (reasoningChunks % 100 === 0) {
+        console.log(`[${provider}] ${reasoningChunks} reasoning chunks…`);
+      }
+      input.onReasoning?.(reasoningChunks);
+    }
+
+    if (delta?.content) {
       if (firstTokenAt === null) {
         firstTokenAt = Date.now() - t0;
-        console.log(`[${provider}] first token after ${firstTokenAt}ms`);
+        console.log(
+          `[${provider}] first content token after ${firstTokenAt}ms` +
+            (firstReasoningAt !== null
+              ? ` (reasoned for ${firstTokenAt - firstReasoningAt}ms)`
+              : "")
+        );
       }
-      text += choice.delta.content;
+      text += delta.content;
       tokenChunks++;
-      input.onChunk?.(choice.delta.content);
+      input.onChunk?.(delta.content);
     }
     if (choice?.finish_reason) finishReason = choice.finish_reason;
     if (chunk.usage) {
@@ -178,7 +214,7 @@ async function generateOpenAICompat(
   }
 
   console.log(
-    `[${provider}] stream ended after ${Date.now() - t0}ms, chunks=${tokenChunks}, chars=${text.length}, finish=${finishReason}`
+    `[${provider}] stream ended after ${Date.now() - t0}ms, content_chunks=${tokenChunks}, reasoning_chunks=${reasoningChunks}, chars=${text.length}, finish=${finishReason}`
   );
 
   if (!text) {

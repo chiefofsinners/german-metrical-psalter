@@ -40,6 +40,7 @@ export default function Home() {
   const [generating, setGenerating] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [streamingText, setStreamingText] = useState("");
+  const [reasoningCount, setReasoningCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>("en");
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -83,6 +84,7 @@ export default function Home() {
     setError(null);
     setResult(null);
     setStreamingText("");
+    setReasoningCount(0);
     setElapsed(0);
     const start = Date.now();
     elapsedTimer.current = setInterval(
@@ -121,6 +123,8 @@ export default function Home() {
           if (event.type === "chunk" && typeof event.delta === "string") {
             accumulated += event.delta;
             setStreamingText(accumulated);
+          } else if (event.type === "thinking" && typeof event.count === "number") {
+            setReasoningCount(event.count);
           } else if (event.type === "done") {
             const { type: _t, ...rest } = event;
             void _t;
@@ -314,9 +318,11 @@ export default function Home() {
           {generating && (
             <div className="space-y-2">
               <p className="text-stone-400 italic">
-                {streamingText.length === 0
-                  ? t.streamingWaiting(elapsed)
-                  : t.streamingChars(streamingText.length, elapsed)}
+                {streamingText.length > 0
+                  ? t.streamingChars(streamingText.length, elapsed)
+                  : reasoningCount > 0
+                  ? t.streamingThinking(reasoningCount, elapsed)
+                  : t.streamingWaiting(elapsed)}
               </p>
               {streamingText.length > 0 && (
                 <details className="text-xs">
