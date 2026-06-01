@@ -49,6 +49,8 @@ const PROVIDER_ORDER: Provider[] = [
 const LANG_STORAGE_KEY = "psalter.lang";
 const MODEL_STORAGE_KEY = "psalter.model";
 const PROMPT_STORAGE_KEY = "psalter.systemPrompt";
+const PSALM_STORAGE_KEY = "psalter.psalm";
+const VARIANTS_STORAGE_KEY = "psalter.variants";
 
 export default function Home() {
   const [psalm, setPsalm] = useState(23);
@@ -82,6 +84,14 @@ export default function Home() {
     if (savedModel) setModel(savedModel);
     const savedPrompt = window.localStorage.getItem(PROMPT_STORAGE_KEY);
     if (savedPrompt) setSystemPrompt(savedPrompt);
+    const savedPsalm = Number(window.localStorage.getItem(PSALM_STORAGE_KEY));
+    if (Number.isInteger(savedPsalm) && savedPsalm >= 1 && savedPsalm <= 150)
+      setPsalm(savedPsalm);
+    const savedVariants = Number(
+      window.localStorage.getItem(VARIANTS_STORAGE_KEY)
+    );
+    if (Number.isInteger(savedVariants) && savedVariants >= 1 && savedVariants <= 5)
+      setVariantCount(savedVariants);
   }, []);
 
   useEffect(() => {
@@ -92,6 +102,14 @@ export default function Home() {
   useEffect(() => {
     window.localStorage.setItem(MODEL_STORAGE_KEY, model);
   }, [model]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PSALM_STORAGE_KEY, String(psalm));
+  }, [psalm]);
+
+  useEffect(() => {
+    window.localStorage.setItem(VARIANTS_STORAGE_KEY, String(variantCount));
+  }, [variantCount]);
 
   function openSettings() {
     setPromptDraft(systemPrompt);
@@ -364,7 +382,7 @@ export default function Home() {
                           return next;
                         })
                       }
-                      className="flex w-full items-center gap-1.5 text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 py-1"
+                      className="flex w-full items-center gap-1.5 text-left text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 py-1"
                       aria-expanded={!collapsed}
                     >
                       <span
@@ -399,7 +417,7 @@ export default function Home() {
                                   ? t.missingKey(PROVIDER_LABEL[p])
                                   : m.id
                               }
-                              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                              className={`text-left text-xs px-2.5 py-1 rounded-full border transition-colors ${
                                 selected
                                   ? "bg-stone-900 text-stone-50 border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100"
                                   : disabled
