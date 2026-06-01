@@ -490,13 +490,22 @@ export function Psalter({ initial }: { initial: Prefs }) {
           )}
           {generating && (
             <div className="space-y-2">
-              <p className="text-stone-400 italic">
-                {streamingText.length > 0
-                  ? t.streamingChars(streamingText.length, elapsed)
-                  : reasoningCount > 0
-                  ? t.streamingThinking(reasoningCount, elapsed)
-                  : t.streamingWaiting(elapsed)}
-              </p>
+              <div className="flex items-center gap-3">
+                <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-stone-300 border-t-stone-600 dark:border-stone-700 dark:border-t-stone-300" />
+                <p className="text-stone-400 italic">
+                  {streamingText.length > 0
+                    ? t.streamingChars(streamingText.length, elapsed)
+                    : reasoningCount > 0
+                    ? t.streamingThinking(reasoningCount, elapsed)
+                    : t.streamingWaiting(elapsed)}
+                </p>
+                <button
+                  onClick={cancel}
+                  className="ml-auto shrink-0 text-xs text-stone-500 underline hover:text-stone-800 dark:hover:text-stone-200"
+                >
+                  {t.cancel}
+                </button>
+              </div>
               {streamingText.length > 0 && (
                 <details className="text-xs">
                   <summary className="cursor-pointer text-stone-500 hover:text-stone-800 dark:hover:text-stone-200">

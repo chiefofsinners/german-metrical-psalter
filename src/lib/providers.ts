@@ -34,7 +34,7 @@ export const MODELS: ModelConfig[] = [
   { id: "deepseek-v4-flash", label: "V4 Flash", provider: "deepseek" },
   { id: "deepseek-v4-pro", label: "V4 Pro", provider: "deepseek" },
   { id: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick", provider: "openrouter" },
-  { id: "z-ai/glm-5-turbo", label: "GLM 5 Turbo", provider: "openrouter" },
+  { id: "z-ai/glm-4.7-flash", label: "GLM 4.7 Flash", provider: "openrouter" },
   { id: "qwen/qwen3.6-plus", label: "Qwen 3.6 Plus", provider: "openrouter" },
   { id: "moonshotai/kimi-k2.6", label: "Kimi K2.6", provider: "openrouter" },
 ];
@@ -251,6 +251,10 @@ async function generateOpenAICompat(
     ...(provider === "deepseek" || provider === "lmstudio"
       ? {}
       : { stream_options: { include_usage: true } }),
+    // Gemini 3.x defaults to a generous dynamic thinking budget, so a "Flash"
+    // model can sit silent for 90s+ before its first token. Google's compat
+    // endpoint maps reasoning_effort to the thinking budget — cap it low.
+    ...(provider === "google" ? { reasoning_effort: "low" as const } : {}),
   }, { signal: input.signal });
 
   let text = "";
