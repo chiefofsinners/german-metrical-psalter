@@ -35,7 +35,7 @@ export const MODELS: ModelConfig[] = [
   { id: "deepseek-v4-pro", label: "V4 Pro", provider: "deepseek" },
   { id: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick", provider: "openrouter" },
   { id: "qwen/qwen3.6-plus", label: "Qwen 3.6 Plus", provider: "openrouter" },
-  { id: "moonshotai/kimi-k2.6", label: "Kimi K2.6", provider: "openrouter" },
+  { id: "moonshotai/kimi-k2-0905", label: "Kimi K2", provider: "openrouter" },
 ];
 
 export function findModel(id: string): ModelConfig | undefined {
