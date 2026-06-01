@@ -175,7 +175,7 @@ export default function Home() {
           <div
             dir="rtl"
             lang="he"
-            className="font-serif text-xl leading-relaxed text-stone-800 dark:text-stone-200 whitespace-pre-wrap"
+            className="font-serif text-4xl leading-relaxed text-stone-800 dark:text-stone-200 whitespace-pre-wrap"
             style={{ fontFamily: '"SBL Hebrew", "Ezra SIL", "Times New Roman", serif' }}
           >
             {hebrewLoading ? (
@@ -225,7 +225,12 @@ export default function Home() {
               max={5}
               value={variantCount}
               onChange={(e) => setVariantCount(Number(e.target.value))}
-              className="w-full"
+              className="variants-slider w-full"
+              style={
+                {
+                  "--p": `${((variantCount - 1) / 4) * 100}%`,
+                } as React.CSSProperties
+              }
             />
           </div>
           <div>
@@ -274,7 +279,7 @@ export default function Home() {
           <button
             onClick={generate}
             disabled={generating}
-            className="w-full py-2 rounded bg-black text-stone-50 hover:bg-stone-500 disabled:opacity-50 disabled:hover:bg-black dark:bg-stone-700 dark:text-stone-50 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:disabled:hover:bg-stone-700 dark:disabled:hover:text-stone-50 transition-colors"
+            className="w-full py-2 rounded bg-stone-200 text-stone-900 hover:bg-stone-900 hover:text-stone-50 disabled:opacity-50 disabled:hover:bg-stone-200 disabled:hover:text-stone-900 dark:bg-stone-700 dark:text-stone-50 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:disabled:hover:bg-stone-700 dark:disabled:hover:text-stone-50 transition-colors"
           >
             {generating ? t.generating(elapsed) : t.generate}
           </button>
