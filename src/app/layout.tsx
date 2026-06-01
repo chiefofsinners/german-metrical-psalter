@@ -13,9 +13,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ??
+      "https://german-metrical-psalter.vercel.app"
+  ),
   title: "German Metrical Psalter",
   description:
     "Generates German Common Metre renderings of the Hebrew Psalms.",
+  openGraph: {
+    title: "German Metrical Psalter",
+    description:
+      "Hebrew Psalms rendered into singable modern German Common Metre.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "German Metrical Psalter",
+    description:
+      "Hebrew Psalms rendered into singable modern German Common Metre.",
+  },
 };
 
 export default function RootLayout({
