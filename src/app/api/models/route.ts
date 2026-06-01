@@ -9,6 +9,7 @@ const ENV_KEYS = {
   google: "GOOGLE_API_KEY",
   xai: "XAI_API_KEY",
   deepseek: "DEEPSEEK_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
 } as const;
 
 export async function GET() {

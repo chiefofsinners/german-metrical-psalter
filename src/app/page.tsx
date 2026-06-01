@@ -17,6 +17,7 @@ type Provider =
   | "google"
   | "xai"
   | "deepseek"
+  | "openrouter"
   | "lmstudio";
 type ModelInfo = {
   id: string;
@@ -31,6 +32,7 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   google: "Google",
   xai: "xAI",
   deepseek: "DeepSeek",
+  openrouter: "Open Source (via OpenRouter)",
   lmstudio: "Local (LM Studio)",
 };
 const PROVIDER_ORDER: Provider[] = [
@@ -39,6 +41,7 @@ const PROVIDER_ORDER: Provider[] = [
   "google",
   "xai",
   "deepseek",
+  "openrouter",
   "lmstudio",
 ];
 

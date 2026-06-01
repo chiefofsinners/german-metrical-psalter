@@ -7,6 +7,7 @@ export type Provider =
   | "google"
   | "xai"
   | "deepseek"
+  | "openrouter"
   | "lmstudio";
 
 export const LMSTUDIO_BASE_URL =
@@ -32,6 +33,10 @@ export const MODELS: ModelConfig[] = [
   { id: "grok-4.3", label: "Grok 4.3", provider: "xai" },
   { id: "deepseek-v4-flash", label: "V4 Flash", provider: "deepseek" },
   { id: "deepseek-v4-pro", label: "V4 Pro", provider: "deepseek" },
+  { id: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick", provider: "openrouter" },
+  { id: "z-ai/glm-5.1", label: "GLM 5.1", provider: "openrouter" },
+  { id: "qwen/qwen3.7-max", label: "Qwen 3.7 Max", provider: "openrouter" },
+  { id: "moonshotai/kimi-k2.6", label: "Kimi K2.6", provider: "openrouter" },
 ];
 
 export function findModel(id: string): ModelConfig | undefined {
@@ -96,6 +101,10 @@ const ENDPOINTS: Record<Exclude<Provider, "anthropic">, ProviderEndpoint> = {
   },
   xai: { envKey: "XAI_API_KEY", baseURL: "https://api.x.ai/v1" },
   deepseek: { envKey: "DEEPSEEK_API_KEY", baseURL: "https://api.deepseek.com/v1" },
+  openrouter: {
+    envKey: "OPENROUTER_API_KEY",
+    baseURL: "https://openrouter.ai/api/v1",
+  },
   lmstudio: { envKey: null, baseURL: LMSTUDIO_BASE_URL },
 };
 
@@ -131,9 +140,11 @@ export async function generateVariants(input: GenerateInput): Promise<GenerateOu
     case "google":
       return generateOpenAICompat(input, input.model.provider, /* schemaSupport */ true);
     case "deepseek":
+    case "openrouter":
     case "lmstudio":
-      // DeepSeek's compat endpoint and most local LM Studio models don't
-      // reliably honour json_schema strict mode — fall back to json_object.
+      // DeepSeek's compat endpoint, OpenRouter's varied backends, and most
+      // local LM Studio models don't reliably honour json_schema strict mode
+      // — fall back to json_object.
       return generateOpenAICompat(input, input.model.provider, /* schemaSupport */ false);
   }
 }
@@ -189,7 +200,7 @@ async function generateAnthropic(input: GenerateInput): Promise<GenerateOutput> 
 
 async function generateOpenAICompat(
   input: GenerateInput,
-  provider: "openai" | "google" | "xai" | "deepseek" | "lmstudio",
+  provider: "openai" | "google" | "xai" | "deepseek" | "openrouter" | "lmstudio",
   schemaSupport: boolean
 ): Promise<GenerateOutput> {
   const endpoint = ENDPOINTS[provider];
