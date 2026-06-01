@@ -6,6 +6,7 @@ import {
   generateVariants,
   ProviderError,
   MODELS,
+  discoverLMStudioModels,
 } from "@/lib/providers";
 
 export const runtime = "nodejs";
@@ -52,7 +53,12 @@ export async function POST(req: NextRequest) {
       message: "variants must be an integer between 1 and 5",
     });
   }
-  const model = findModel(modelId);
+  let model = findModel(modelId);
+  if (!model) {
+    // Maybe it's a model currently loaded in LM Studio.
+    const local = await discoverLMStudioModels();
+    model = local.find((m) => m.id === modelId);
+  }
   if (!model) {
     return sseResponse(400, {
       type: "error",

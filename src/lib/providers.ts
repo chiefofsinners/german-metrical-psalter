@@ -1,7 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 
-export type Provider = "anthropic" | "openai" | "xai" | "deepseek";
+export type Provider =
+  | "anthropic"
+  | "openai"
+  | "google"
+  | "xai"
+  | "deepseek"
+  | "lmstudio";
+
+export const LMSTUDIO_BASE_URL =
+  process.env.LMSTUDIO_BASE_URL ?? "http://localhost:1234/v1";
 
 export interface ModelConfig {
   id: string;
@@ -16,6 +25,10 @@ export const MODELS: ModelConfig[] = [
   { id: "gpt-5.4-nano", label: "GPT-5.4 nano", provider: "openai" },
   { id: "gpt-5.4-mini", label: "GPT-5.4 mini", provider: "openai" },
   { id: "gpt-5.5", label: "GPT-5.5", provider: "openai" },
+  { id: "gemini-2.5-flash-lite", label: "2.5 Flash Lite", provider: "google" },
+  { id: "gemini-2.5-flash", label: "2.5 Flash", provider: "google" },
+  { id: "gemini-3.1-pro", label: "3.1 Pro", provider: "google" },
+  { id: "gemini-3.5-flash", label: "3.5 Flash", provider: "google" },
   { id: "grok-4.3", label: "Grok 4.3", provider: "xai" },
   { id: "deepseek-v4-flash", label: "V4 Flash", provider: "deepseek" },
   { id: "deepseek-v4-pro", label: "V4 Pro", provider: "deepseek" },
@@ -25,15 +38,65 @@ export function findModel(id: string): ModelConfig | undefined {
   return MODELS.find((m) => m.id === id);
 }
 
+/**
+ * Probe the LM Studio server for currently-loaded models. Returns [] if the
+ * server is unreachable (LM Studio not running) so the UI just silently
+ * shows no Local chips.
+ */
+export async function discoverLMStudioModels(): Promise<ModelConfig[]> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 1500);
+    const r = await fetch(`${LMSTUDIO_BASE_URL}/models`, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!r.ok) return [];
+    const body = (await r.json()) as { data?: Array<{ id: string }> };
+    return (body.data ?? [])
+      .filter((m) => isChatModel(m.id))
+      .map((m) => ({
+        id: m.id,
+        label: humaniseLMStudioId(m.id),
+        provider: "lmstudio" as const,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function isChatModel(id: string): boolean {
+  // LM Studio's /v1/models lists every loaded model including embedding and
+  // transcription models that can't do chat completions. Filter those out so
+  // the picker only shows usable chips.
+  return !/(\bembed\b|embedding|whisper|tts|asr|reranker|clip|vision[-_]encoder)/i.test(
+    id
+  );
+}
+
+function humaniseLMStudioId(id: string): string {
+  // "lmstudio-community/Llama-3.2-3B-Instruct-GGUF" → "Llama 3.2 3B Instruct"
+  const last = id.split("/").pop() ?? id;
+  return last
+    .replace(/[-_]/g, " ")
+    .replace(/\bGGUF\b/i, "")
+    .replace(/\bMLX\b/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 interface ProviderEndpoint {
-  envKey: string;
+  envKey: string | null; // null => no key required (e.g. local server)
   baseURL?: string;
 }
 
 const ENDPOINTS: Record<Exclude<Provider, "anthropic">, ProviderEndpoint> = {
   openai: { envKey: "OPENAI_API_KEY" },
+  google: {
+    envKey: "GOOGLE_API_KEY",
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+  },
   xai: { envKey: "XAI_API_KEY", baseURL: "https://api.x.ai/v1" },
   deepseek: { envKey: "DEEPSEEK_API_KEY", baseURL: "https://api.deepseek.com/v1" },
+  lmstudio: { envKey: null, baseURL: LMSTUDIO_BASE_URL },
 };
 
 export interface GenerateInput {
@@ -65,9 +128,13 @@ export async function generateVariants(input: GenerateInput): Promise<GenerateOu
       return generateAnthropic(input);
     case "openai":
     case "xai":
+    case "google":
       return generateOpenAICompat(input, input.model.provider, /* schemaSupport */ true);
     case "deepseek":
-      return generateOpenAICompat(input, "deepseek", /* schemaSupport */ false);
+    case "lmstudio":
+      // DeepSeek's compat endpoint and most local LM Studio models don't
+      // reliably honour json_schema strict mode — fall back to json_object.
+      return generateOpenAICompat(input, input.model.provider, /* schemaSupport */ false);
   }
 }
 
@@ -122,12 +189,18 @@ async function generateAnthropic(input: GenerateInput): Promise<GenerateOutput> 
 
 async function generateOpenAICompat(
   input: GenerateInput,
-  provider: "openai" | "xai" | "deepseek",
+  provider: "openai" | "google" | "xai" | "deepseek" | "lmstudio",
   schemaSupport: boolean
 ): Promise<GenerateOutput> {
   const endpoint = ENDPOINTS[provider];
-  const apiKey = process.env[endpoint.envKey];
-  if (!apiKey) throw new ProviderError(`${endpoint.envKey} is not set`, 401);
+  let apiKey: string;
+  if (endpoint.envKey === null) {
+    apiKey = "lm-studio"; // local server, key is ignored but SDK requires non-empty
+  } else {
+    const k = process.env[endpoint.envKey];
+    if (!k) throw new ProviderError(`${endpoint.envKey} is not set`, 401);
+    apiKey = k;
+  }
 
   const client = new OpenAI({ apiKey, baseURL: endpoint.baseURL });
 
@@ -149,8 +222,9 @@ async function generateOpenAICompat(
         }
       : { type: "json_object" },
     stream: true,
-    // OpenAI-specific extension that DeepSeek's compat endpoint may not honor.
-    ...(provider === "deepseek"
+    // OpenAI-specific extension that DeepSeek and most local servers may not
+    // honor — sending it can silently break streaming.
+    ...(provider === "deepseek" || provider === "lmstudio"
       ? {}
       : { stream_options: { include_usage: true } }),
   });

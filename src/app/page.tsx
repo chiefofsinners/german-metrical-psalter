@@ -11,7 +11,13 @@ type GenerateResponse = {
   error?: string;
 };
 
-type Provider = "anthropic" | "openai" | "xai" | "deepseek";
+type Provider =
+  | "anthropic"
+  | "openai"
+  | "google"
+  | "xai"
+  | "deepseek"
+  | "lmstudio";
 type ModelInfo = {
   id: string;
   label: string;
@@ -22,10 +28,19 @@ type ModelInfo = {
 const PROVIDER_LABEL: Record<Provider, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
+  google: "Google",
   xai: "xAI",
   deepseek: "DeepSeek",
+  lmstudio: "Local (LM Studio)",
 };
-const PROVIDER_ORDER: Provider[] = ["anthropic", "openai", "xai", "deepseek"];
+const PROVIDER_ORDER: Provider[] = [
+  "anthropic",
+  "openai",
+  "google",
+  "xai",
+  "deepseek",
+  "lmstudio",
+];
 
 const LANG_STORAGE_KEY = "psalter.lang";
 
