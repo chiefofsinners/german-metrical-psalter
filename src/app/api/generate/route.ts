@@ -9,7 +9,9 @@ import {
 } from "@/lib/providers";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+// Vercel Pro + Fluid Compute ceiling. Classic serverless caps at 300; deploy
+// will fail if Fluid Compute isn't enabled on the project.
+export const maxDuration = 800;
 
 function sseResponse(status: number, body: object): Response {
   const encoder = new TextEncoder();
