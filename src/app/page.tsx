@@ -52,6 +52,9 @@ export default function Home() {
   const [variantCount, setVariantCount] = useState(3);
   const [model, setModel] = useState<string>("claude-sonnet-4-6");
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [collapsedProviders, setCollapsedProviders] = useState<Set<Provider>>(
+    () => new Set(PROVIDER_ORDER.filter((p) => p !== "anthropic"))
+  );
   const [hebrew, setHebrew] = useState<string[]>([]);
   const [hebrewLoading, setHebrewLoading] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -257,42 +260,72 @@ export default function Home() {
           </div>
           <div>
             <label className="block text-sm mb-2">{t.modelLabel}</label>
-            <div className="space-y-3">
+            <div className="space-y-1">
               {PROVIDER_ORDER.map((p) => {
                 const group = models.filter((m) => m.provider === p);
                 if (group.length === 0) return null;
+                const collapsed = collapsedProviders.has(p);
+                const containsSelected = group.some((m) => m.id === model);
                 return (
                   <div key={p}>
-                    <div className="text-[10px] uppercase tracking-wider text-stone-400 mb-1">
-                      {PROVIDER_LABEL[p]}
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {group.map((m) => {
-                        const selected = m.id === model;
-                        const disabled = !m.available;
-                        return (
-                          <button
-                            key={m.id}
-                            onClick={() => !disabled && setModel(m.id)}
-                            disabled={disabled}
-                            title={
-                              disabled
-                                ? t.missingKey(PROVIDER_LABEL[p])
-                                : m.id
-                            }
-                            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                              selected
-                                ? "bg-stone-900 text-stone-50 border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100"
-                                : disabled
-                                ? "border-stone-200 text-stone-300 line-through cursor-not-allowed dark:border-stone-800 dark:text-stone-600"
-                                : "border-stone-300 text-stone-700 hover:border-stone-900 hover:text-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:border-stone-100 dark:hover:text-stone-100"
-                            }`}
-                          >
-                            {m.label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <button
+                      onClick={() =>
+                        setCollapsedProviders((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(p)) next.delete(p);
+                          else next.add(p);
+                          return next;
+                        })
+                      }
+                      className="flex w-full items-center gap-1.5 text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 py-1"
+                      aria-expanded={!collapsed}
+                    >
+                      <span
+                        className={`inline-block transition-transform ${
+                          collapsed ? "" : "rotate-90"
+                        }`}
+                      >
+                        ▸
+                      </span>
+                      <span>{PROVIDER_LABEL[p]}</span>
+                      <span className="text-stone-300 dark:text-stone-600">
+                        ({group.length})
+                      </span>
+                      {collapsed && containsSelected && (
+                        <span className="ml-auto normal-case tracking-normal text-[11px] text-stone-600 dark:text-stone-300">
+                          {group.find((m) => m.id === model)?.label}
+                        </span>
+                      )}
+                    </button>
+                    {!collapsed && (
+                      <div className="flex flex-wrap gap-1 mt-1 mb-2">
+                        {group.map((m) => {
+                          const selected = m.id === model;
+                          const disabled = !m.available;
+                          return (
+                            <button
+                              key={m.id}
+                              onClick={() => !disabled && setModel(m.id)}
+                              disabled={disabled}
+                              title={
+                                disabled
+                                  ? t.missingKey(PROVIDER_LABEL[p])
+                                  : m.id
+                              }
+                              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                                selected
+                                  ? "bg-stone-900 text-stone-50 border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100"
+                                  : disabled
+                                  ? "border-stone-200 text-stone-300 line-through cursor-not-allowed dark:border-stone-800 dark:text-stone-600"
+                                  : "border-stone-300 text-stone-700 hover:border-stone-900 hover:text-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:border-stone-100 dark:hover:text-stone-100"
+                              }`}
+                            >
+                              {m.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
