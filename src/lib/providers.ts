@@ -213,7 +213,17 @@ async function generateOpenAICompat(
     apiKey = k;
   }
 
-  const client = new OpenAI({ apiKey, baseURL: endpoint.baseURL });
+  const client = new OpenAI({
+    apiKey,
+    baseURL: endpoint.baseURL,
+    // SDK default is 600_000ms — a slow reasoning model (e.g. Kimi via
+    // OpenRouter) trips it and the request dies silently at 600s, well before
+    // the route's maxDuration=800 ceiling. Raise it just under that ceiling so
+    // the Vercel limit governs, not the SDK. Retries off: re-running an
+    // 800s job on timeout is never what we want.
+    timeout: 790_000,
+    maxRetries: 0,
+  });
 
   const t0 = Date.now();
   const stream = await client.chat.completions.create({
@@ -253,8 +263,12 @@ async function generateOpenAICompat(
     chunkIndex++;
     const choice = chunk.choices[0];
     const delta = choice?.delta as
-      | { content?: string; reasoning_content?: string }
+      | { content?: string; reasoning_content?: string; reasoning?: string }
       | undefined;
+    // DeepSeek-direct emits `reasoning_content`; OpenRouter normalizes the same
+    // tokens into `reasoning`. Treat them interchangeably so the thinking
+    // indicator works for both.
+    const reasoning = delta?.reasoning_content ?? delta?.reasoning;
 
     if (chunkIndex === 1) {
       console.log(
@@ -263,7 +277,7 @@ async function generateOpenAICompat(
       );
     }
 
-    if (delta?.reasoning_content) {
+    if (reasoning) {
       if (firstReasoningAt === null) {
         firstReasoningAt = Date.now() - t0;
         console.log(`[${provider}] reasoning started after ${firstReasoningAt}ms`);
