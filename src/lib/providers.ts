@@ -115,6 +115,9 @@ export interface GenerateInput {
   schema: object;
   onChunk?: (delta: string) => void;
   onReasoning?: (chunkCount: number) => void;
+  // Aborts the upstream model request when the client disconnects/cancels, so a
+  // long-thinking model stops burning tokens instead of running to maxDuration.
+  signal?: AbortSignal;
 }
 
 export interface GenerateOutput {
@@ -169,7 +172,7 @@ async function generateAnthropic(input: GenerateInput): Promise<GenerateOutput> 
     output_config: {
       format: { type: "json_schema", schema: input.schema as { [k: string]: unknown } },
     },
-  });
+  }, { signal: input.signal });
 
   if (input.onChunk) {
     stream.on("text", (delta) => input.onChunk?.(delta));
@@ -248,7 +251,7 @@ async function generateOpenAICompat(
     ...(provider === "deepseek" || provider === "lmstudio"
       ? {}
       : { stream_options: { include_usage: true } }),
-  });
+  }, { signal: input.signal });
 
   let text = "";
   let finishReason = "unknown";

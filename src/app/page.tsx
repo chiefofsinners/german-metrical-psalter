@@ -117,6 +117,7 @@ export default function Home() {
   const [promptDraft, setPromptDraft] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const t = STRINGS[lang];
   const promptCustomized = systemPrompt !== SYSTEM_PROMPT;
 
@@ -207,6 +208,10 @@ export default function Home() {
     };
   }, [psalm]);
 
+  function cancel() {
+    abortRef.current?.abort();
+  }
+
   async function generate() {
     setGenerating(true);
     setError(null);
@@ -220,6 +225,8 @@ export default function Home() {
       250
     );
     let accumulated = "";
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const r = await fetch("/api/generate", {
         method: "POST",
@@ -230,6 +237,7 @@ export default function Home() {
           model,
           systemPrompt,
         }),
+        signal: controller.signal,
       });
       if (!r.body) {
         setError(`HTTP ${r.status} (no body)`);
@@ -268,8 +276,12 @@ export default function Home() {
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // A user-initiated cancel surfaces as an AbortError — not an error to show.
+      if (!(e instanceof DOMException && e.name === "AbortError")) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     } finally {
+      abortRef.current = null;
       setGenerating(false);
       if (elapsedTimer.current) {
         clearInterval(elapsedTimer.current);
@@ -476,13 +488,21 @@ export default function Home() {
               })}
             </div>
           </div>
-          <button
-            onClick={generate}
-            disabled={generating}
-            className="w-full py-2 rounded bg-stone-200 text-stone-900 hover:bg-stone-900 hover:text-stone-50 disabled:opacity-50 disabled:hover:bg-stone-200 disabled:hover:text-stone-900 dark:bg-stone-700 dark:text-stone-50 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:disabled:hover:bg-stone-700 dark:disabled:hover:text-stone-50 transition-colors"
-          >
-            {generating ? t.generating(elapsed) : t.generate}
-          </button>
+          {generating ? (
+            <button
+              onClick={cancel}
+              className="w-full py-2 rounded border border-stone-300 text-stone-700 hover:bg-stone-900 hover:text-stone-50 hover:border-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:hover:border-stone-300 transition-colors"
+            >
+              {t.cancel} · {elapsed}s
+            </button>
+          ) : (
+            <button
+              onClick={generate}
+              className="w-full py-2 rounded bg-stone-200 text-stone-900 hover:bg-stone-900 hover:text-stone-50 dark:bg-stone-700 dark:text-stone-50 dark:hover:bg-stone-300 dark:hover:text-stone-900 transition-colors"
+            >
+              {t.generate}
+            </button>
+          )}
           {generating && (
             <div className="h-1 w-full overflow-hidden rounded bg-stone-200 dark:bg-stone-800">
               <div className="h-full w-1/3 bg-stone-800 dark:bg-stone-200 animate-indeterminate" />

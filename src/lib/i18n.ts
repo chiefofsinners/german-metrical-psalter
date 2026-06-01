@@ -13,6 +13,7 @@ export const STRINGS = {
     missingKey: (provider: string) => `Missing API key for ${provider}`,
     generate: "Generate",
     generating: (s: number) => `Generating… ${s}s`,
+    cancel: "Cancel",
     outputHeader: "German Common Metre",
     pressGenerate: (psalm: number, n: number) =>
       `Press Generate to render Psalm ${psalm} into ${n} version${n === 1 ? "" : "s"}.`,
@@ -51,6 +52,7 @@ export const STRINGS = {
     missingKey: (provider: string) => `Kein API-Schlüssel für ${provider}`,
     generate: "Erzeugen",
     generating: (s: number) => `Erzeuge… ${s}s`,
+    cancel: "Abbrechen",
     outputHeader: "Deutsch im Common Metre",
     pressGenerate: (psalm: number, n: number) =>
       `Drücke „Erzeugen", um Psalm ${psalm} in ${n} Fassung${n === 1 ? "" : "en"} zu setzen.`,

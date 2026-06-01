@@ -115,6 +115,9 @@ export async function POST(req: NextRequest) {
             // Throttle: only emit every 10 reasoning chunks.
             if (count % 10 === 0) send({ type: "thinking", count });
           },
+          // When the client cancels, the fetch aborts and req.signal fires,
+          // tearing down the upstream model request too.
+          signal: req.signal,
         });
         console.log(
           `[generate] done in ${Date.now() - t0}ms, stop_reason=${result.stopReason}, usage=`,
@@ -131,15 +134,25 @@ export async function POST(req: NextRequest) {
           },
         });
       } catch (err) {
-        console.error(`[generate] error after ${Date.now() - t0}ms`, err);
-        const message =
-          err instanceof Error ? err.message : String(err);
-        const status =
-          err instanceof ProviderError ? err.status : 500;
-        send({ type: "error", message, status });
+        // Client cancelled / disconnected — the stream is already gone, so
+        // there's nothing to report and nothing to enqueue.
+        if (req.signal.aborted) {
+          console.log(`[generate] aborted by client after ${Date.now() - t0}ms`);
+        } else {
+          console.error(`[generate] error after ${Date.now() - t0}ms`, err);
+          const message =
+            err instanceof Error ? err.message : String(err);
+          const status =
+            err instanceof ProviderError ? err.status : 500;
+          send({ type: "error", message, status });
+        }
       } finally {
         clearInterval(heartbeat);
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Already closed by the aborted connection.
+        }
       }
     },
   });
