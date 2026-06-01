@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { STRINGS, type Lang } from "@/lib/i18n";
+import { SYSTEM_PROMPT } from "@/lib/prompt";
 
 type Stanza = { lines: string[] };
 type Variant = { notes?: string; stanzas: Stanza[] };
@@ -46,6 +47,8 @@ const PROVIDER_ORDER: Provider[] = [
 ];
 
 const LANG_STORAGE_KEY = "psalter.lang";
+const MODEL_STORAGE_KEY = "psalter.model";
+const PROMPT_STORAGE_KEY = "psalter.systemPrompt";
 
 export default function Home() {
   const [psalm, setPsalm] = useState(23);
@@ -64,12 +67,21 @@ export default function Home() {
   const [reasoningCount, setReasoningCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>("en");
+  const [systemPrompt, setSystemPrompt] = useState(SYSTEM_PROMPT);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [promptDraft, setPromptDraft] = useState("");
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const t = STRINGS[lang];
+  const promptCustomized = systemPrompt !== SYSTEM_PROMPT;
 
+  // Restore persisted UI state once on mount.
   useEffect(() => {
-    const saved = window.localStorage.getItem(LANG_STORAGE_KEY);
-    if (saved === "en" || saved === "de") setLang(saved);
+    const savedLang = window.localStorage.getItem(LANG_STORAGE_KEY);
+    if (savedLang === "en" || savedLang === "de") setLang(savedLang);
+    const savedModel = window.localStorage.getItem(MODEL_STORAGE_KEY);
+    if (savedModel) setModel(savedModel);
+    const savedPrompt = window.localStorage.getItem(PROMPT_STORAGE_KEY);
+    if (savedPrompt) setSystemPrompt(savedPrompt);
   }, []);
 
   useEffect(() => {
@@ -78,9 +90,53 @@ export default function Home() {
   }, [lang]);
 
   useEffect(() => {
+    window.localStorage.setItem(MODEL_STORAGE_KEY, model);
+  }, [model]);
+
+  function openSettings() {
+    setPromptDraft(systemPrompt);
+    setSettingsOpen(true);
+  }
+  function savePrompt() {
+    setSystemPrompt(promptDraft);
+    window.localStorage.setItem(PROMPT_STORAGE_KEY, promptDraft);
+    setSettingsOpen(false);
+  }
+  function resetPrompt() {
+    setSystemPrompt(SYSTEM_PROMPT);
+    setPromptDraft(SYSTEM_PROMPT);
+    window.localStorage.removeItem(PROMPT_STORAGE_KEY);
+  }
+
+  // Close the settings dialog on Escape.
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSettingsOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [settingsOpen]);
+
+  useEffect(() => {
     fetch("/api/models")
       .then((r) => r.json())
-      .then((d) => setModels(d.models ?? []));
+      .then((d) => {
+        const list: ModelInfo[] = d.models ?? [];
+        setModels(list);
+        // Expand the provider group holding the restored model so the
+        // selection is visible on load. Read the saved id directly — the
+        // restore effect's setModel may not have flushed into this closure yet.
+        const savedModel = window.localStorage.getItem(MODEL_STORAGE_KEY);
+        const selected = list.find((m) => m.id === savedModel);
+        if (selected) {
+          setCollapsedProviders((prev) => {
+            const next = new Set(prev);
+            next.delete(selected.provider);
+            return next;
+          });
+        }
+      });
   }, []);
 
   useEffect(() => {
@@ -117,7 +173,12 @@ export default function Home() {
       const r = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ psalm, variants: variantCount, model }),
+        body: JSON.stringify({
+          psalm,
+          variants: variantCount,
+          model,
+          systemPrompt,
+        }),
       });
       if (!r.body) {
         setError(`HTTP ${r.status} (no body)`);
@@ -173,22 +234,48 @@ export default function Home() {
           <h1 className="text-xl font-serif">{t.appTitle}</h1>
           <p className="text-sm text-stone-500">{t.appSubtitle}</p>
         </div>
-        <div className="shrink-0 inline-flex border border-stone-300 dark:border-stone-700 rounded overflow-hidden text-xs tabular-nums">
-          {(["en", "de"] as const).map((l) => (
-            <button
-              key={l}
-              onClick={() => setLang(l)}
-              className={`px-2 py-1 transition-colors ${
-                lang === l
-                  ? "bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900"
-                  : "text-stone-600 hover:bg-stone-200 dark:text-stone-400 dark:hover:bg-stone-800"
-              }`}
-              aria-pressed={lang === l}
-              aria-label={l === "en" ? "English" : "Deutsch"}
+        <div className="shrink-0 flex items-center gap-3">
+          <div className="inline-flex border border-stone-300 dark:border-stone-700 rounded overflow-hidden text-xs tabular-nums">
+            {(["en", "de"] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                className={`px-2 py-1 transition-colors ${
+                  lang === l
+                    ? "bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900"
+                    : "text-stone-600 hover:bg-stone-200 dark:text-stone-400 dark:hover:bg-stone-800"
+                }`}
+                aria-pressed={lang === l}
+                aria-label={l === "en" ? "English" : "Deutsch"}
+              >
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={openSettings}
+            title={t.settings}
+            aria-label={t.settings}
+            className="relative p-1.5 rounded text-stone-500 hover:bg-stone-200 hover:text-stone-900 dark:hover:bg-stone-800 dark:hover:text-stone-100 transition-colors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-5 h-5"
+              aria-hidden="true"
             >
-              {l.toUpperCase()}
-            </button>
-          ))}
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            {promptCustomized && (
+              <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-stone-50 dark:ring-stone-950" />
+            )}
+          </button>
         </div>
       </header>
 
@@ -423,6 +510,69 @@ export default function Home() {
           ))}
         </section>
       </main>
+
+      {settingsOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8"
+          onClick={() => setSettingsOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.settings}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="my-auto w-full max-w-2xl rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-xl"
+          >
+            <header className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 px-4 py-3">
+              <h2 className="text-sm font-medium">{t.settings}</h2>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                aria-label={t.promptCancel}
+                className="text-stone-400 hover:text-stone-800 dark:hover:text-stone-200 text-lg leading-none"
+              >
+                ✕
+              </button>
+            </header>
+            <div className="p-4 space-y-3">
+              <label className="block text-sm font-medium">
+                {t.promptHeader}
+              </label>
+              <textarea
+                value={promptDraft}
+                onChange={(e) => setPromptDraft(e.target.value)}
+                rows={18}
+                spellCheck={false}
+                className="w-full rounded border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-950 p-3 font-mono text-[11px] leading-relaxed text-stone-700 dark:text-stone-300"
+              />
+              <p className="text-xs text-stone-400">{t.promptHint}</p>
+            </div>
+            <footer className="flex items-center justify-between gap-3 border-t border-stone-200 dark:border-stone-800 px-4 py-3">
+              <button
+                onClick={resetPrompt}
+                disabled={!promptCustomized}
+                className="text-xs text-stone-500 hover:text-stone-800 disabled:opacity-40 disabled:hover:text-stone-500 dark:hover:text-stone-200"
+              >
+                {t.promptReset}
+              </button>
+              <div className="flex items-center gap-3 text-xs">
+                <button
+                  onClick={() => setSettingsOpen(false)}
+                  className="text-stone-500 hover:text-stone-800 dark:hover:text-stone-200"
+                >
+                  {t.promptCancel}
+                </button>
+                <button
+                  onClick={savePrompt}
+                  disabled={!promptDraft.trim()}
+                  className="px-3 py-1.5 rounded bg-stone-900 text-stone-50 hover:bg-stone-700 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-300"
+                >
+                  {t.promptSave}
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

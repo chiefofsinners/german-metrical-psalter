@@ -30,7 +30,12 @@ function sseResponse(status: number, body: object): Response {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { psalm?: number; variants?: number; model?: string };
+  let body: {
+    psalm?: number;
+    variants?: number;
+    model?: string;
+    systemPrompt?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -40,6 +45,12 @@ export async function POST(req: NextRequest) {
   const psalm = Number(body.psalm);
   const variants = Number(body.variants ?? 3);
   const modelId = body.model ?? "claude-sonnet-4-6";
+  // Client may override the system prompt (editable in the UI). Fall back to
+  // the bundled default for empty/missing values.
+  const systemPrompt =
+    typeof body.systemPrompt === "string" && body.systemPrompt.trim()
+      ? body.systemPrompt
+      : SYSTEM_PROMPT;
 
   if (!Number.isInteger(psalm) || psalm < 1 || psalm > 150) {
     return sseResponse(400, {
@@ -96,7 +107,7 @@ export async function POST(req: NextRequest) {
       try {
         const result = await generateVariants({
           model,
-          systemPrompt: SYSTEM_PROMPT,
+          systemPrompt,
           userPrompt: buildUserPrompt(psalm, hebrew, variants),
           schema: OUTPUT_SCHEMA,
           onChunk: (delta) => send({ type: "chunk", delta }),

@@ -29,6 +29,15 @@ export const STRINGS = {
     copy: "Copy",
     usage: (input: number, output: number, cached?: number) =>
       `${input} in / ${output} out${cached ? ` · ${cached} cached` : ""}`,
+    promptHeader: "System prompt",
+    promptCustomized: "customized",
+    promptEdit: "Edit",
+    promptSave: "Save",
+    promptCancel: "Cancel",
+    promptReset: "Reset to default",
+    promptHint:
+      "Sent to the model on every generation. Saved in your browser.",
+    settings: "Settings",
   },
   de: {
     appTitle: "Deutscher metrischer Psalter",
@@ -58,5 +67,14 @@ export const STRINGS = {
     copy: "Kopieren",
     usage: (input: number, output: number, cached?: number) =>
       `${input} ein / ${output} aus${cached ? ` · ${cached} aus Cache` : ""}`,
+    promptHeader: "System-Prompt",
+    promptCustomized: "angepasst",
+    promptEdit: "Bearbeiten",
+    promptSave: "Speichern",
+    promptCancel: "Abbrechen",
+    promptReset: "Auf Standard zurücksetzen",
+    promptHint:
+      "Wird bei jeder Erzeugung an das Modell gesendet. Im Browser gespeichert.",
+    settings: "Einstellungen",
   },
 } as const satisfies Record<Lang, unknown>;
