@@ -27,7 +27,7 @@ export const MODELS: ModelConfig[] = [
   { id: "gpt-5.5", label: "GPT-5.5", provider: "openai" },
   { id: "gemini-2.5-flash-lite", label: "2.5 Flash Lite", provider: "google" },
   { id: "gemini-2.5-flash", label: "2.5 Flash", provider: "google" },
-  { id: "gemini-3.1-pro", label: "3.1 Pro", provider: "google" },
+  { id: "gemini-3.1-pro-preview", label: "3.1 Pro (Preview)", provider: "google" },
   { id: "gemini-3.5-flash", label: "3.5 Flash", provider: "google" },
   { id: "grok-4.3", label: "Grok 4.3", provider: "xai" },
   { id: "deepseek-v4-flash", label: "V4 Flash", provider: "deepseek" },
