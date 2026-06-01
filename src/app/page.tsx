@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { STRINGS, type Lang } from "@/lib/i18n";
 import { SYSTEM_PROMPT } from "@/lib/prompt";
+
+// Restore must run before the browser paints, otherwise the pre-restore
+// (default/invisible) frame flashes. useLayoutEffect does that on the client;
+// fall back to useEffect on the server, where layout effects are a no-op and
+// would otherwise warn.
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 type Stanza = { lines: string[] };
 type Variant = { notes?: string; stanzas: Stanza[] };
@@ -46,19 +53,49 @@ const PROVIDER_ORDER: Provider[] = [
   "lmstudio",
 ];
 
+const DEFAULT_MODEL = "claude-sonnet-4-6";
+
 const LANG_STORAGE_KEY = "psalter.lang";
 const MODEL_STORAGE_KEY = "psalter.model";
 const PROMPT_STORAGE_KEY = "psalter.systemPrompt";
 const PSALM_STORAGE_KEY = "psalter.psalm";
 const VARIANTS_STORAGE_KEY = "psalter.variants";
 
+// Read persisted state synchronously so the first client render already has the
+// remembered value (no flash from a default rendering first). Returns the
+// fallback on the server, where localStorage is unavailable. Content is gated
+// on `hydrated` so this client/server divergence is never painted.
+function readStored<T>(
+  key: string,
+  fallback: T,
+  parse: (raw: string) => T | null
+): T {
+  if (typeof window === "undefined") return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (raw === null) return fallback;
+  const parsed = parse(raw);
+  return parsed === null ? fallback : parsed;
+}
+
 export default function Home() {
-  const [psalm, setPsalm] = useState(23);
-  const [variantCount, setVariantCount] = useState(3);
-  const [model, setModel] = useState<string>("claude-sonnet-4-6");
+  const [psalm, setPsalm] = useState(() =>
+    readStored(PSALM_STORAGE_KEY, 23, (r) => {
+      const n = Number(r);
+      return Number.isInteger(n) && n >= 1 && n <= 150 ? n : null;
+    })
+  );
+  const [variantCount, setVariantCount] = useState(() =>
+    readStored(VARIANTS_STORAGE_KEY, 3, (r) => {
+      const n = Number(r);
+      return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
+    })
+  );
+  const [model, setModel] = useState<string>(() =>
+    readStored(MODEL_STORAGE_KEY, DEFAULT_MODEL, (r) => r || null)
+  );
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<Provider>>(
-    () => new Set(PROVIDER_ORDER.filter((p) => p !== "anthropic"))
+    () => new Set(PROVIDER_ORDER)
   );
   const [hebrew, setHebrew] = useState<string[]>([]);
   const [hebrewLoading, setHebrewLoading] = useState(false);
@@ -68,30 +105,25 @@ export default function Home() {
   const [streamingText, setStreamingText] = useState("");
   const [reasoningCount, setReasoningCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [lang, setLang] = useState<Lang>("en");
-  const [systemPrompt, setSystemPrompt] = useState(SYSTEM_PROMPT);
+  const [lang, setLang] = useState<Lang>(() =>
+    readStored<Lang>(LANG_STORAGE_KEY, "en", (r) =>
+      r === "en" || r === "de" ? r : null
+    )
+  );
+  const [systemPrompt, setSystemPrompt] = useState(() =>
+    readStored(PROMPT_STORAGE_KEY, SYSTEM_PROMPT, (r) => r || null)
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState("");
+  const [hydrated, setHydrated] = useState(false);
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const t = STRINGS[lang];
   const promptCustomized = systemPrompt !== SYSTEM_PROMPT;
 
-  // Restore persisted UI state once on mount.
-  useEffect(() => {
-    const savedLang = window.localStorage.getItem(LANG_STORAGE_KEY);
-    if (savedLang === "en" || savedLang === "de") setLang(savedLang);
-    const savedModel = window.localStorage.getItem(MODEL_STORAGE_KEY);
-    if (savedModel) setModel(savedModel);
-    const savedPrompt = window.localStorage.getItem(PROMPT_STORAGE_KEY);
-    if (savedPrompt) setSystemPrompt(savedPrompt);
-    const savedPsalm = Number(window.localStorage.getItem(PSALM_STORAGE_KEY));
-    if (Number.isInteger(savedPsalm) && savedPsalm >= 1 && savedPsalm <= 150)
-      setPsalm(savedPsalm);
-    const savedVariants = Number(
-      window.localStorage.getItem(VARIANTS_STORAGE_KEY)
-    );
-    if (Number.isInteger(savedVariants) && savedVariants >= 1 && savedVariants <= 5)
-      setVariantCount(savedVariants);
+  // Values are restored synchronously by the lazy initializers above; reveal
+  // the (already-correct) content once mounted on the client.
+  useIsomorphicLayoutEffect(() => {
+    setHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -145,8 +177,9 @@ export default function Home() {
         // Expand the provider group holding the restored model so the
         // selection is visible on load. Read the saved id directly — the
         // restore effect's setModel may not have flushed into this closure yet.
-        const savedModel = window.localStorage.getItem(MODEL_STORAGE_KEY);
-        const selected = list.find((m) => m.id === savedModel);
+        const targetModel =
+          window.localStorage.getItem(MODEL_STORAGE_KEY) ?? DEFAULT_MODEL;
+        const selected = list.find((m) => m.id === targetModel);
         if (selected) {
           setCollapsedProviders((prev) => {
             const next = new Set(prev);
@@ -247,6 +280,13 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
+      {!hydrated && (
+        <div className="fixed inset-0 flex items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-stone-300 border-t-stone-800 dark:border-stone-700 dark:border-t-stone-200" />
+        </div>
+      )}
+      {hydrated && (
+      <div>
       <header className="border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-serif">{t.appTitle}</h1>
@@ -528,6 +568,8 @@ export default function Home() {
           ))}
         </section>
       </main>
+      </div>
+      )}
 
       {settingsOpen && (
         <div
