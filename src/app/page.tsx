@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { STRINGS, type Lang } from "@/lib/i18n";
 
 type Stanza = { lines: string[] };
 type Variant = { notes?: string; stanzas: Stanza[] };
@@ -26,6 +27,8 @@ const PROVIDER_LABEL: Record<Provider, string> = {
 };
 const PROVIDER_ORDER: Provider[] = ["anthropic", "openai", "xai", "deepseek"];
 
+const LANG_STORAGE_KEY = "psalter.lang";
+
 export default function Home() {
   const [psalm, setPsalm] = useState(23);
   const [variantCount, setVariantCount] = useState(3);
@@ -37,7 +40,19 @@ export default function Home() {
   const [generating, setGenerating] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [lang, setLang] = useState<Lang>("en");
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const t = STRINGS[lang];
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(LANG_STORAGE_KEY);
+    if (saved === "en" || saved === "de") setLang(saved);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(LANG_STORAGE_KEY, lang);
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   useEffect(() => {
     fetch("/api/models")
@@ -101,18 +116,34 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
-      <header className="border-b border-stone-200 dark:border-stone-800 px-6 py-4">
-        <h1 className="text-xl font-serif">German Metrical Psalter</h1>
-        <p className="text-sm text-stone-500">
-          Renders the Hebrew Psalms into singable modern German Common Metre
-          (8.6.8.6, iambic). Translated each time by Claude Sonnet 4.6.
-        </p>
+      <header className="border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-serif">{t.appTitle}</h1>
+          <p className="text-sm text-stone-500">{t.appSubtitle}</p>
+        </div>
+        <div className="shrink-0 inline-flex border border-stone-300 dark:border-stone-700 rounded overflow-hidden text-xs tabular-nums">
+          {(["en", "de"] as const).map((l) => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              className={`px-2 py-1 transition-colors ${
+                lang === l
+                  ? "bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900"
+                  : "text-stone-600 hover:bg-stone-200 dark:text-stone-400 dark:hover:bg-stone-800"
+              }`}
+              aria-pressed={lang === l}
+              aria-label={l === "en" ? "English" : "Deutsch"}
+            >
+              {l.toUpperCase()}
+            </button>
+          ))}
+        </div>
       </header>
 
       <main className="grid grid-cols-1 lg:grid-cols-[1fr_320px_2fr] gap-6 p-6">
         <section className="min-w-0">
           <h2 className="text-sm uppercase tracking-wider text-stone-500 mb-3">
-            Hebrew — Psalm {psalm}
+            {t.hebrewHeader(psalm)}
           </h2>
           <div
             dir="rtl"
@@ -121,7 +152,7 @@ export default function Home() {
             style={{ fontFamily: '"SBL Hebrew", "Ezra SIL", "Times New Roman", serif' }}
           >
             {hebrewLoading ? (
-              <span className="text-stone-400 text-base">Laden…</span>
+              <span className="text-stone-400 text-base">{t.hebrewLoading}</span>
             ) : (
               hebrew.map((v, i) => (
                 <p key={i} className="mb-2">
@@ -138,7 +169,8 @@ export default function Home() {
         <aside className="lg:sticky lg:top-6 lg:self-start space-y-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 bg-white dark:bg-stone-900">
           <div>
             <label className="block text-sm mb-2">
-              Psalm <span className="text-stone-400">— {psalm}</span>
+              {t.psalmLabel}{" "}
+              <span className="text-stone-400">— {psalm}</span>
             </label>
             <div className="grid grid-cols-10 gap-0.5">
               {Array.from({ length: 150 }, (_, i) => i + 1).map((n) => (
@@ -158,7 +190,7 @@ export default function Home() {
           </div>
           <div>
             <label className="block text-sm mb-1">
-              Variants: {variantCount}
+              {t.variantsLabel(variantCount)}
             </label>
             <input
               type="range"
@@ -170,7 +202,7 @@ export default function Home() {
             />
           </div>
           <div>
-            <label className="block text-sm mb-2">Model</label>
+            <label className="block text-sm mb-2">{t.modelLabel}</label>
             <div className="space-y-3">
               {PROVIDER_ORDER.map((p) => {
                 const group = models.filter((m) => m.provider === p);
@@ -191,7 +223,7 @@ export default function Home() {
                             disabled={disabled}
                             title={
                               disabled
-                                ? `Missing API key for ${PROVIDER_LABEL[p]}`
+                                ? t.missingKey(PROVIDER_LABEL[p])
                                 : m.id
                             }
                             className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
@@ -217,7 +249,7 @@ export default function Home() {
             disabled={generating}
             className="w-full py-2 rounded bg-black text-stone-50 hover:bg-stone-500 disabled:opacity-50 disabled:hover:bg-black dark:bg-stone-700 dark:text-stone-50 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:disabled:hover:bg-stone-700 dark:disabled:hover:text-stone-50 transition-colors"
           >
-            {generating ? `Generating… ${elapsed}s` : "Generate"}
+            {generating ? t.generating(elapsed) : t.generate}
           </button>
           {generating && (
             <div className="h-1 w-full overflow-hidden rounded bg-stone-200 dark:bg-stone-800">
@@ -229,30 +261,26 @@ export default function Home() {
           )}
           {result?.meta?.usage && (
             <p className="text-xs text-stone-400">
-              {result.meta.usage.input_tokens} in /{" "}
-              {result.meta.usage.output_tokens} out
-              {result.meta.usage.cache_read_input_tokens
-                ? ` · ${result.meta.usage.cache_read_input_tokens} cached`
-                : ""}
+              {t.usage(
+                result.meta.usage.input_tokens,
+                result.meta.usage.output_tokens,
+                result.meta.usage.cache_read_input_tokens
+              )}
             </p>
           )}
         </aside>
 
         <section className="min-w-0 space-y-6">
           <h2 className="text-sm uppercase tracking-wider text-stone-500">
-            German Common Metre
+            {t.outputHeader}
           </h2>
           {!result && !generating && (
             <p className="text-stone-400 italic">
-              Press <em>Generate</em> to render Psalm {psalm} into {variantCount}{" "}
-              version{variantCount === 1 ? "" : "s"}.
+              {t.pressGenerate(psalm, variantCount)}
             </p>
           )}
           {generating && (
-            <p className="text-stone-400 italic">
-              Claude is composing… {elapsed}s elapsed. Long psalms may take a
-              minute or two.
-            </p>
+            <p className="text-stone-400 italic">{t.composing(elapsed)}</p>
           )}
           {result?.variants?.map((variant, vi) => (
             <article
@@ -260,14 +288,14 @@ export default function Home() {
               className="border border-stone-200 dark:border-stone-800 rounded-lg p-4 bg-white dark:bg-stone-900"
             >
               <header className="flex items-baseline justify-between mb-3">
-                <h3 className="font-serif text-lg">Version {vi + 1}</h3>
+                <h3 className="font-serif text-lg">{t.versionHeader(vi + 1)}</h3>
                 <button
                   onClick={() =>
                     navigator.clipboard.writeText(stanzasToText(variant.stanzas))
                   }
                   className="text-xs text-stone-500 hover:text-stone-800 dark:hover:text-stone-200"
                 >
-                  Copy
+                  {t.copy}
                 </button>
               </header>
               {variant.notes && (
