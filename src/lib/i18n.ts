@@ -18,6 +18,11 @@ export const STRINGS = {
       `Press Generate to render Psalm ${psalm} into ${n} version${n === 1 ? "" : "s"}.`,
     composing: (s: number) =>
       `Composing… ${s}s elapsed. Long psalms may take a minute or two.`,
+    streamingWaiting: (s: number) =>
+      `Waiting for first token… ${s}s (reasoning models often pause 30–120s before writing).`,
+    streamingChars: (chars: number, s: number) =>
+      `Receiving… ${chars.toLocaleString()} chars in ${s}s`,
+    showRaw: "Show raw stream",
     versionHeader: (n: number) => `Version ${n}`,
     copy: "Copy",
     usage: (input: number, output: number, cached?: number) =>
@@ -40,6 +45,11 @@ export const STRINGS = {
       `Drücke „Erzeugen", um Psalm ${psalm} in ${n} Fassung${n === 1 ? "" : "en"} zu setzen.`,
     composing: (s: number) =>
       `Komponiere… ${s}s vergangen. Lange Psalmen brauchen ein paar Minuten.`,
+    streamingWaiting: (s: number) =>
+      `Warte auf erstes Token… ${s}s (Reasoning-Modelle denken oft 30–120s, bevor sie schreiben).`,
+    streamingChars: (chars: number, s: number) =>
+      `Empfange… ${chars.toLocaleString()} Zeichen in ${s}s`,
+    showRaw: "Rohdaten anzeigen",
     versionHeader: (n: number) => `Fassung ${n}`,
     copy: "Kopieren",
     usage: (input: number, output: number, cached?: number) =>

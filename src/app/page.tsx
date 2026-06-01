@@ -39,6 +39,7 @@ export default function Home() {
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [generating, setGenerating] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [lang, setLang] = useState<Lang>("en");
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -81,27 +82,53 @@ export default function Home() {
     setGenerating(true);
     setError(null);
     setResult(null);
+    setStreamingText("");
     setElapsed(0);
     const start = Date.now();
     elapsedTimer.current = setInterval(
       () => setElapsed(Math.floor((Date.now() - start) / 1000)),
       250
     );
+    let accumulated = "";
     try {
       const r = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          psalm,
-          variants: variantCount,
-          model,
-        }),
+        body: JSON.stringify({ psalm, variants: variantCount, model }),
       });
-      const d: GenerateResponse = await r.json();
-      if (!r.ok) {
-        setError(d.error ?? `HTTP ${r.status}`);
-      } else {
-        setResult(d);
+      if (!r.body) {
+        setError(`HTTP ${r.status} (no body)`);
+        return;
+      }
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+        for (const raw of events) {
+          const line = raw.startsWith("data: ") ? raw.slice(6) : raw;
+          if (!line.trim()) continue;
+          let event: { type: string; [k: string]: unknown };
+          try {
+            event = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (event.type === "chunk" && typeof event.delta === "string") {
+            accumulated += event.delta;
+            setStreamingText(accumulated);
+          } else if (event.type === "done") {
+            const { type: _t, ...rest } = event;
+            void _t;
+            setResult(rest as unknown as GenerateResponse);
+          } else if (event.type === "error") {
+            setError(String(event.message ?? "unknown error"));
+          }
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -280,7 +307,23 @@ export default function Home() {
             </p>
           )}
           {generating && (
-            <p className="text-stone-400 italic">{t.composing(elapsed)}</p>
+            <div className="space-y-2">
+              <p className="text-stone-400 italic">
+                {streamingText.length === 0
+                  ? t.streamingWaiting(elapsed)
+                  : t.streamingChars(streamingText.length, elapsed)}
+              </p>
+              {streamingText.length > 0 && (
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-stone-500 hover:text-stone-800 dark:hover:text-stone-200">
+                    {t.showRaw}
+                  </summary>
+                  <pre className="mt-2 max-h-64 overflow-auto rounded bg-stone-100 dark:bg-stone-900 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all text-stone-700 dark:text-stone-300">
+                    {streamingText}
+                  </pre>
+                </details>
+              )}
+            </div>
           )}
           {result?.variants?.map((variant, vi) => (
             <article

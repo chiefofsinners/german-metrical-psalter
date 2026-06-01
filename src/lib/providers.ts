@@ -10,15 +10,15 @@ export interface ModelConfig {
 }
 
 export const MODELS: ModelConfig[] = [
+  { id: "claude-haiku-4-5", label: "Haiku 4.5", provider: "anthropic" },
   { id: "claude-sonnet-4-6", label: "Sonnet 4.6", provider: "anthropic" },
   { id: "claude-opus-4-7", label: "Opus 4.7", provider: "anthropic" },
-  { id: "claude-haiku-4-5", label: "Haiku 4.5", provider: "anthropic" },
-  { id: "gpt-5.5", label: "GPT-5.5", provider: "openai" },
-  { id: "gpt-5.4-mini", label: "GPT-5.4 mini", provider: "openai" },
   { id: "gpt-5.4-nano", label: "GPT-5.4 nano", provider: "openai" },
+  { id: "gpt-5.4-mini", label: "GPT-5.4 mini", provider: "openai" },
+  { id: "gpt-5.5", label: "GPT-5.5", provider: "openai" },
   { id: "grok-4.3", label: "Grok 4.3", provider: "xai" },
-  { id: "deepseek-v4-pro", label: "V4 Pro", provider: "deepseek" },
   { id: "deepseek-v4-flash", label: "V4 Flash", provider: "deepseek" },
+  { id: "deepseek-v4-pro", label: "V4 Pro", provider: "deepseek" },
 ];
 
 export function findModel(id: string): ModelConfig | undefined {
@@ -41,6 +41,7 @@ export interface GenerateInput {
   systemPrompt: string;
   userPrompt: string;
   schema: object;
+  onChunk?: (delta: string) => void;
 }
 
 export interface GenerateOutput {
@@ -91,6 +92,10 @@ async function generateAnthropic(input: GenerateInput): Promise<GenerateOutput> 
     },
   });
 
+  if (input.onChunk) {
+    stream.on("text", (delta) => input.onChunk?.(delta));
+  }
+
   const final = await stream.finalMessage();
   const text = final.content.find(
     (b): b is Anthropic.TextBlock => b.type === "text"
@@ -125,7 +130,8 @@ async function generateOpenAICompat(
 
   const client = new OpenAI({ apiKey, baseURL: endpoint.baseURL });
 
-  const params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
+  const t0 = Date.now();
+  const stream = await client.chat.completions.create({
     model: input.model.id,
     messages: [
       { role: "system", content: input.systemPrompt },
@@ -141,25 +147,51 @@ async function generateOpenAICompat(
           },
         }
       : { type: "json_object" },
-  };
+    stream: true,
+    stream_options: { include_usage: true },
+  });
 
-  const completion = await client.chat.completions.create(params);
-  const choice = completion.choices[0];
-  const text = choice?.message?.content;
+  let text = "";
+  let finishReason = "unknown";
+  let usage = { input_tokens: 0, output_tokens: 0 };
+  let firstTokenAt: number | null = null;
+  let tokenChunks = 0;
+
+  for await (const chunk of stream) {
+    const choice = chunk.choices[0];
+    if (choice?.delta?.content) {
+      if (firstTokenAt === null) {
+        firstTokenAt = Date.now() - t0;
+        console.log(`[${provider}] first token after ${firstTokenAt}ms`);
+      }
+      text += choice.delta.content;
+      tokenChunks++;
+      input.onChunk?.(choice.delta.content);
+    }
+    if (choice?.finish_reason) finishReason = choice.finish_reason;
+    if (chunk.usage) {
+      usage = {
+        input_tokens: chunk.usage.prompt_tokens ?? 0,
+        output_tokens: chunk.usage.completion_tokens ?? 0,
+      };
+    }
+  }
+
+  console.log(
+    `[${provider}] stream ended after ${Date.now() - t0}ms, chunks=${tokenChunks}, chars=${text.length}, finish=${finishReason}`
+  );
+
   if (!text) {
     throw new ProviderError(
-      `${provider} returned no message content (finish_reason=${choice?.finish_reason})`,
+      `${provider} returned no message content (finish_reason=${finishReason})`,
       502
     );
   }
 
   return {
     json: safeParse(text),
-    stopReason: choice.finish_reason ?? "unknown",
-    usage: {
-      input_tokens: completion.usage?.prompt_tokens ?? 0,
-      output_tokens: completion.usage?.completion_tokens ?? 0,
-    },
+    stopReason: finishReason,
+    usage,
   };
 }
 
