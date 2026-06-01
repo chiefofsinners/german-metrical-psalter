@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Stanza = { lines: string[] };
 type Variant = { notes?: string; stanzas: Stanza[] };
@@ -10,14 +10,40 @@ type GenerateResponse = {
   error?: string;
 };
 
+type Provider = "anthropic" | "openai" | "xai" | "deepseek";
+type ModelInfo = {
+  id: string;
+  label: string;
+  provider: Provider;
+  available: boolean;
+};
+
+const PROVIDER_LABEL: Record<Provider, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  xai: "xAI",
+  deepseek: "DeepSeek",
+};
+const PROVIDER_ORDER: Provider[] = ["anthropic", "openai", "xai", "deepseek"];
+
 export default function Home() {
   const [psalm, setPsalm] = useState(23);
   const [variantCount, setVariantCount] = useState(3);
+  const [model, setModel] = useState<string>("claude-sonnet-4-6");
+  const [models, setModels] = useState<ModelInfo[]>([]);
   const [hebrew, setHebrew] = useState<string[]>([]);
   const [hebrewLoading, setHebrewLoading] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/models")
+      .then((r) => r.json())
+      .then((d) => setModels(d.models ?? []));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,11 +66,21 @@ export default function Home() {
     setGenerating(true);
     setError(null);
     setResult(null);
+    setElapsed(0);
+    const start = Date.now();
+    elapsedTimer.current = setInterval(
+      () => setElapsed(Math.floor((Date.now() - start) / 1000)),
+      250
+    );
     try {
       const r = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ psalm, variants: variantCount }),
+        body: JSON.stringify({
+          psalm,
+          variants: variantCount,
+          model,
+        }),
       });
       const d: GenerateResponse = await r.json();
       if (!r.ok) {
@@ -56,6 +92,10 @@ export default function Home() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setGenerating(false);
+      if (elapsedTimer.current) {
+        clearInterval(elapsedTimer.current);
+        elapsedTimer.current = null;
+      }
     }
   }
 
@@ -97,18 +137,24 @@ export default function Home() {
 
         <aside className="lg:sticky lg:top-6 lg:self-start space-y-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 bg-white dark:bg-stone-900">
           <div>
-            <label className="block text-sm mb-1">Psalm</label>
-            <input
-              type="number"
-              min={1}
-              max={150}
-              value={psalm}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (Number.isInteger(v) && v >= 1 && v <= 150) setPsalm(v);
-              }}
-              className="w-full border border-stone-300 dark:border-stone-700 rounded px-2 py-1 bg-transparent"
-            />
+            <label className="block text-sm mb-2">
+              Psalm <span className="text-stone-400">— {psalm}</span>
+            </label>
+            <div className="grid grid-cols-10 gap-0.5">
+              {Array.from({ length: 150 }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPsalm(n)}
+                  className={`text-[10px] py-1 rounded tabular-nums transition-colors ${
+                    n === psalm
+                      ? "bg-stone-800 text-stone-50 dark:bg-stone-200 dark:text-stone-900"
+                      : "text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
           </div>
           <div>
             <label className="block text-sm mb-1">
@@ -123,13 +169,61 @@ export default function Home() {
               className="w-full"
             />
           </div>
+          <div>
+            <label className="block text-sm mb-2">Model</label>
+            <div className="space-y-3">
+              {PROVIDER_ORDER.map((p) => {
+                const group = models.filter((m) => m.provider === p);
+                if (group.length === 0) return null;
+                return (
+                  <div key={p}>
+                    <div className="text-[10px] uppercase tracking-wider text-stone-400 mb-1">
+                      {PROVIDER_LABEL[p]}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {group.map((m) => {
+                        const selected = m.id === model;
+                        const disabled = !m.available;
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => !disabled && setModel(m.id)}
+                            disabled={disabled}
+                            title={
+                              disabled
+                                ? `Missing API key for ${PROVIDER_LABEL[p]}`
+                                : m.id
+                            }
+                            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                              selected
+                                ? "bg-stone-900 text-stone-50 border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100"
+                                : disabled
+                                ? "border-stone-200 text-stone-300 line-through cursor-not-allowed dark:border-stone-800 dark:text-stone-600"
+                                : "border-stone-300 text-stone-700 hover:border-stone-900 hover:text-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:border-stone-100 dark:hover:text-stone-100"
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           <button
             onClick={generate}
             disabled={generating}
-            className="w-full py-2 rounded bg-stone-800 text-stone-50 hover:bg-stone-700 disabled:opacity-50 dark:bg-stone-200 dark:text-stone-900"
+            className="w-full py-2 rounded bg-black text-stone-50 hover:bg-stone-500 disabled:opacity-50 disabled:hover:bg-black dark:bg-stone-700 dark:text-stone-50 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:disabled:hover:bg-stone-700 dark:disabled:hover:text-stone-50 transition-colors"
           >
-            {generating ? "Generating…" : "Generate"}
+            {generating ? `Generating… ${elapsed}s` : "Generate"}
           </button>
+          {generating && (
+            <div className="h-1 w-full overflow-hidden rounded bg-stone-200 dark:bg-stone-800">
+              <div className="h-full w-1/3 bg-stone-800 dark:bg-stone-200 animate-indeterminate" />
+            </div>
+          )}
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           )}
@@ -156,7 +250,8 @@ export default function Home() {
           )}
           {generating && (
             <p className="text-stone-400 italic">
-              Claude is composing… long psalms may take a minute.
+              Claude is composing… {elapsed}s elapsed. Long psalms may take a
+              minute or two.
             </p>
           )}
           {result?.variants?.map((variant, vi) => (

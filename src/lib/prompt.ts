@@ -48,7 +48,7 @@ Return a JSON object exactly matching this schema:
 {
   "variants": [
     {
-      "notes": "<one short sentence on this version's approach (optional)>",
+      "notes": "<one short sentence on this version's approach, or empty string>",
       "stanzas": [
         { "lines": ["<line 1, 8 syllables>", "<line 2, 6 syllables>", "<line 3, 8 syllables>", "<line 4, 6 syllables>"] }
       ]
@@ -97,7 +97,7 @@ export const OUTPUT_SCHEMA = {
             },
           },
         },
-        required: ["stanzas"],
+        required: ["notes", "stanzas"],
         additionalProperties: false,
       },
     },

@@ -1,15 +1,22 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { getPsalm } from "@/lib/psalms";
 import { SYSTEM_PROMPT, buildUserPrompt, OUTPUT_SCHEMA } from "@/lib/prompt";
+import {
+  findModel,
+  generateVariants,
+  ProviderError,
+  MODELS,
+} from "@/lib/providers";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const client = new Anthropic();
-
 export async function POST(req: NextRequest) {
-  let body: { psalm?: number; variants?: number };
+  let body: {
+    psalm?: number;
+    variants?: number;
+    model?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -18,6 +25,7 @@ export async function POST(req: NextRequest) {
 
   const psalm = Number(body.psalm);
   const variants = Number(body.variants ?? 3);
+  const modelId = body.model ?? "claude-sonnet-4-6";
 
   if (!Number.isInteger(psalm) || psalm < 1 || psalm > 150) {
     return NextResponse.json(
@@ -31,66 +39,53 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  const model = findModel(modelId);
+  if (!model) {
+    return NextResponse.json(
+      {
+        error: `unknown model "${modelId}". Known: ${MODELS.map((m) => m.id).join(", ")}`,
+      },
+      { status: 400 }
+    );
+  }
 
   const hebrew = getPsalm(psalm);
   if (!hebrew) {
     return NextResponse.json({ error: `Psalm ${psalm} not found` }, { status: 404 });
   }
 
+  console.log(
+    `[generate] psalm=${psalm} variants=${variants} verses=${hebrew.length} model=${model.id}`
+  );
+  const t0 = Date.now();
+
   try {
-    const stream = client.messages.stream({
-      model: "claude-sonnet-4-6",
-      max_tokens: 32000,
-      thinking: { type: "adaptive" },
-      system: [
-        {
-          type: "text",
-          text: SYSTEM_PROMPT,
-          cache_control: { type: "ephemeral" },
-        },
-      ],
-      messages: [{ role: "user", content: buildUserPrompt(psalm, hebrew, variants) }],
-      output_config: {
-        format: { type: "json_schema", schema: OUTPUT_SCHEMA },
-      },
+    const result = await generateVariants({
+      model,
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt: buildUserPrompt(psalm, hebrew, variants),
+      schema: OUTPUT_SCHEMA,
     });
-
-    const final = await stream.finalMessage();
-
-    const textBlock = final.content.find(
-      (b): b is Anthropic.TextBlock => b.type === "text"
+    console.log(
+      `[generate] done in ${Date.now() - t0}ms, stop_reason=${result.stopReason}, usage=`,
+      result.usage
     );
-    if (!textBlock) {
-      return NextResponse.json(
-        { error: "Model returned no text content", stop_reason: final.stop_reason },
-        { status: 502 }
-      );
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(textBlock.text);
-    } catch {
-      return NextResponse.json(
-        { error: "Model returned non-JSON output", raw: textBlock.text },
-        { status: 502 }
-      );
-    }
-
     return NextResponse.json({
-      ...(parsed as object),
+      ...(result.json as object),
       meta: {
-        stop_reason: final.stop_reason,
-        usage: final.usage,
+        stop_reason: result.stopReason,
+        usage: result.usage,
+        provider: model.provider,
       },
     });
   } catch (err) {
-    if (err instanceof Anthropic.APIError) {
-      return NextResponse.json(
-        { error: err.message, type: err.type },
-        { status: err.status ?? 500 }
-      );
+    console.error(`[generate] error after ${Date.now() - t0}ms`, err);
+    if (err instanceof ProviderError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    throw err;
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
   }
 }
