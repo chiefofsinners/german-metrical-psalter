@@ -1,4 +1,5 @@
 import type { Lang } from "./i18n";
+import { DEFAULT_METER_ID } from "./meters";
 
 // Persisted UI preferences. Stored in a cookie (not just localStorage) so the
 // server can read them and render the correct content on the first paint — no
@@ -16,6 +17,7 @@ export interface Prefs {
   model: string;
   psalm: number;
   variants: number;
+  meter: string;
   promptCustomized: boolean;
 }
 
@@ -24,6 +26,7 @@ export const DEFAULT_PREFS: Prefs = {
   model: DEFAULT_MODEL,
   psalm: 23,
   variants: 3,
+  meter: DEFAULT_METER_ID,
   promptCustomized: false,
 };
 
@@ -53,6 +56,8 @@ export function parsePrefs(raw: string | undefined): Prefs {
       o.variants <= 5
         ? o.variants
         : DEFAULT_PREFS.variants,
+    meter:
+      typeof o.meter === "string" && o.meter ? o.meter : DEFAULT_PREFS.meter,
     promptCustomized: o.promptCustomized === true,
   };
 }

@@ -2,12 +2,37 @@
 
 import { useEffect, useRef, useState } from "react";
 import { STRINGS, type Lang } from "@/lib/i18n";
-import { SYSTEM_PROMPT } from "@/lib/prompt";
+import { buildSystemPrompt } from "@/lib/prompt";
+import { METERS, findMeter } from "@/lib/meters";
 import {
   type Prefs,
   PROMPT_STORAGE_KEY,
   serializePrefsCookie,
 } from "@/lib/prefs";
+
+// Parse a psalm reference into a psalm and optional verse range. Accepts
+// "119:1-6", "119,1-6", "103:5", "103", or a bare "1-6" (applied to the current
+// psalm). Returns null if it can't be read. Verse bounds are validated against
+// the loaded psalm elsewhere.
+function parseReference(
+  input: string,
+  currentPsalm: number
+): { psalm: number; start?: number; end?: number } | null {
+  const s = input.trim();
+  if (!s) return { psalm: currentPsalm };
+  const inRange = (p: number) => p >= 1 && p <= 150;
+  let m = s.match(/^(\d{1,3})\s*[:.,]\s*(\d{1,3})\s*[-–]\s*(\d{1,3})$/);
+  if (m && inRange(+m[1]) && +m[2] <= +m[3])
+    return { psalm: +m[1], start: +m[2], end: +m[3] };
+  m = s.match(/^(\d{1,3})\s*[:.,]\s*(\d{1,3})$/);
+  if (m && inRange(+m[1])) return { psalm: +m[1], start: +m[2], end: +m[2] };
+  m = s.match(/^(\d{1,3})$/);
+  if (m && inRange(+m[1])) return { psalm: +m[1] };
+  m = s.match(/^(\d{1,3})\s*[-–]\s*(\d{1,3})$/);
+  if (m && +m[1] <= +m[2])
+    return { psalm: currentPsalm, start: +m[1], end: +m[2] };
+  return null;
+}
 
 type Stanza = { lines: string[] };
 type Variant = { notes?: string; stanzas: Stanza[] };
@@ -51,6 +76,8 @@ const PROVIDER_ORDER: Provider[] = [
   "lmstudio",
 ];
 
+const JOB_STORAGE_KEY = "psalter.activeJob";
+
 export function Psalter({ initial }: { initial: Prefs }) {
   // Cookie-backed prefs are initialized from props (rendered identically on the
   // server), so there's no flash and no hydration mismatch.
@@ -58,9 +85,17 @@ export function Psalter({ initial }: { initial: Prefs }) {
   const [variantCount, setVariantCount] = useState(initial.variants);
   const [model, setModel] = useState<string>(initial.model);
   const [lang, setLang] = useState<Lang>(initial.lang);
+  const [meterId, setMeterId] = useState(initial.meter);
+  // Optional verse range within the selected psalm (null = whole psalm).
+  const [range, setRange] = useState<{ start: number; end: number } | null>(
+    null
+  );
+  const [refInput, setRefInput] = useState("");
+  const [refError, setRefError] = useState(false);
   const [promptCustomized, setPromptCustomized] = useState(
     initial.promptCustomized
   );
+  const meter = findMeter(meterId);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<Provider>>(
     () => new Set(PROVIDER_ORDER)
@@ -76,11 +111,16 @@ export function Psalter({ initial }: { initial: Prefs }) {
   // The prompt text lives in localStorage (too big for a cookie). It isn't
   // rendered on first paint (only inside the closed settings modal), so loading
   // it after mount can't cause a flash; the dot uses `promptCustomized` instead.
-  const [systemPrompt, setSystemPrompt] = useState(SYSTEM_PROMPT);
+  // Default is meter-specific; a saved custom prompt overrides it.
+  const [systemPrompt, setSystemPrompt] = useState(() =>
+    buildSystemPrompt(findMeter(initial.meter))
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState("");
   const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const activeJobRef = useRef<string | null>(null);
+  const startRef = useRef<number>(0);
   const t = STRINGS[lang];
 
   // Persist cookie-backed prefs whenever they change (also writes the initial
@@ -91,38 +131,75 @@ export function Psalter({ initial }: { initial: Prefs }) {
       model,
       psalm,
       variants: variantCount,
+      meter: meterId,
       promptCustomized,
     });
-  }, [lang, model, psalm, variantCount, promptCustomized]);
+  }, [lang, model, psalm, variantCount, meterId, promptCustomized]);
 
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  // Load the saved prompt text after mount and reconcile the customized flag.
+  // A saved custom prompt (presence in localStorage) overrides the meter
+  // default; load it after mount. We only write localStorage when the user
+  // saves a custom prompt, so presence ⇒ customized.
   useEffect(() => {
     const stored = window.localStorage.getItem(PROMPT_STORAGE_KEY);
     if (stored) {
       setSystemPrompt(stored);
-      setPromptCustomized(stored !== SYSTEM_PROMPT);
-    } else {
-      setPromptCustomized(false);
+      setPromptCustomized(true);
     }
   }, []);
+
+  // Choosing a metre updates the default prompt (unless the user has customized
+  // it — then their text is left alone and the metre still rides in the user
+  // prompt at generation time).
+  function selectMeter(id: string) {
+    setMeterId(id);
+    if (!promptCustomized) setSystemPrompt(buildSystemPrompt(findMeter(id)));
+  }
+
+  function applyReference(value: string) {
+    const parsed = parseReference(value, psalm);
+    if (!parsed) {
+      setRefError(true);
+      return;
+    }
+    setRefError(false);
+    setPsalm(parsed.psalm);
+    setRange(
+      parsed.start && parsed.end
+        ? { start: parsed.start, end: parsed.end }
+        : null
+    );
+  }
+
+  function selectPsalmFromGrid(n: number) {
+    setPsalm(n);
+    setRange(null);
+    setRefInput("");
+    setRefError(false);
+  }
 
   function openSettings() {
     setPromptDraft(systemPrompt);
     setSettingsOpen(true);
   }
   function savePrompt() {
+    const isCustom = promptDraft !== buildSystemPrompt(meter);
     setSystemPrompt(promptDraft);
-    window.localStorage.setItem(PROMPT_STORAGE_KEY, promptDraft);
-    setPromptCustomized(promptDraft !== SYSTEM_PROMPT);
+    setPromptCustomized(isCustom);
+    if (isCustom) {
+      window.localStorage.setItem(PROMPT_STORAGE_KEY, promptDraft);
+    } else {
+      window.localStorage.removeItem(PROMPT_STORAGE_KEY);
+    }
     setSettingsOpen(false);
   }
   function resetPrompt() {
-    setSystemPrompt(SYSTEM_PROMPT);
-    setPromptDraft(SYSTEM_PROMPT);
+    const fresh = buildSystemPrompt(meter);
+    setSystemPrompt(fresh);
+    setPromptDraft(fresh);
     window.localStorage.removeItem(PROMPT_STORAGE_KEY);
     setPromptCustomized(false);
   }
@@ -172,25 +249,136 @@ export function Psalter({ initial }: { initial: Prefs }) {
     };
   }, [psalm]);
 
-  function cancel() {
-    abortRef.current?.abort();
-  }
+  type Snapshot = {
+    status?: string;
+    text?: string;
+    reasoning?: number;
+    createdAt?: number;
+    result?: unknown;
+    error?: string;
+  };
 
-  async function generate() {
+  // Follow a job to completion: live SSE tail first, falling back to polling if
+  // the stream drops. The job itself runs server-side regardless, so neither
+  // channel dropping loses work — and we can resume from the id at any time.
+  async function consumeJob(jobId: string) {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    activeJobRef.current = jobId;
+    window.localStorage.setItem(JOB_STORAGE_KEY, jobId);
+
     setGenerating(true);
     setError(null);
     setResult(null);
     setStreamingText("");
     setReasoningCount(0);
+    startRef.current = Date.now();
     setElapsed(0);
-    const start = Date.now();
+    if (elapsedTimer.current) clearInterval(elapsedTimer.current);
     elapsedTimer.current = setInterval(
-      () => setElapsed(Math.floor((Date.now() - start) / 1000)),
+      () => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)),
       250
     );
-    let accumulated = "";
-    const controller = new AbortController();
-    abortRef.current = controller;
+
+    const stop = () => {
+      if (activeJobRef.current === jobId) {
+        activeJobRef.current = null;
+        window.localStorage.removeItem(JOB_STORAGE_KEY);
+        setGenerating(false);
+        if (elapsedTimer.current) {
+          clearInterval(elapsedTimer.current);
+          elapsedTimer.current = null;
+        }
+      }
+    };
+    const apply = (s: Snapshot) => {
+      if (typeof s.createdAt === "number") startRef.current = s.createdAt;
+      if (typeof s.text === "string") setStreamingText(s.text);
+      if (typeof s.reasoning === "number") setReasoningCount(s.reasoning);
+    };
+    // Returns true once the job reached a terminal state (caller should stop).
+    const handleTerminal = (s: Snapshot): boolean => {
+      if (!s.status || s.status === "running") return false;
+      if (s.status === "done") {
+        setResult((s.result ?? null) as GenerateResponse | null);
+      } else if (s.status === "error") {
+        setError(s.error || "unknown error");
+      }
+      // "cancelled" / "missing" → silent stop, no error.
+      stop();
+      return true;
+    };
+
+    // 1) Live SSE tail.
+    try {
+      const r = await fetch(`/api/job/${jobId}/stream`, {
+        signal: controller.signal,
+      });
+      if (r.ok && r.body) {
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+          for (const raw of events) {
+            if (!raw.startsWith("data:")) continue; // skip ": ping" heartbeats
+            const payload = raw.slice(raw.indexOf("data:") + 5).trim();
+            if (!payload) continue;
+            let snap: Snapshot;
+            try {
+              snap = JSON.parse(payload);
+            } catch {
+              continue;
+            }
+            apply(snap);
+            if (handleTerminal(snap)) return;
+          }
+        }
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      // otherwise fall through to polling
+    }
+
+    // 2) Poll fallback (stream dropped before a terminal state).
+    while (!controller.signal.aborted) {
+      try {
+        const res = await fetch(`/api/job/${jobId}`, {
+          signal: controller.signal,
+        });
+        if (res.status === 404) {
+          stop();
+          return;
+        }
+        const job: Snapshot = await res.json();
+        apply(job);
+        if (handleTerminal(job)) return;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        // transient network error — keep polling
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+
+  async function cancel() {
+    const id = activeJobRef.current;
+    if (!id) return;
+    try {
+      await fetch(`/api/job/${id}/cancel`, { method: "POST" });
+    } catch {
+      // The worker may still see the flag on its next tick; ignore network blips.
+    }
+  }
+
+  async function generate() {
+    setGenerating(true);
+    setError(null);
     try {
       const r = await fetch("/api/generate", {
         method: "POST",
@@ -200,59 +388,31 @@ export function Psalter({ initial }: { initial: Prefs }) {
           variants: variantCount,
           model,
           systemPrompt,
+          meter: meterId,
+          verseStart: range?.start,
+          verseEnd: range?.end,
         }),
-        signal: controller.signal,
       });
-      if (!r.body) {
-        setError(`HTTP ${r.status} (no body)`);
+      const data = await r.json();
+      if (!r.ok || !data.jobId) {
+        setError(data.error ?? `HTTP ${r.status}`);
+        setGenerating(false);
         return;
       }
-      const reader = r.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\n\n");
-        buffer = events.pop() ?? "";
-        for (const raw of events) {
-          const line = raw.startsWith("data: ") ? raw.slice(6) : raw;
-          if (!line.trim()) continue;
-          let event: { type: string; [k: string]: unknown };
-          try {
-            event = JSON.parse(line);
-          } catch {
-            continue;
-          }
-          if (event.type === "chunk" && typeof event.delta === "string") {
-            accumulated += event.delta;
-            setStreamingText(accumulated);
-          } else if (event.type === "thinking" && typeof event.count === "number") {
-            setReasoningCount(event.count);
-          } else if (event.type === "done") {
-            const { type: _t, ...rest } = event;
-            void _t;
-            setResult(rest as unknown as GenerateResponse);
-          } else if (event.type === "error") {
-            setError(String(event.message ?? "unknown error"));
-          }
-        }
-      }
+      void consumeJob(data.jobId);
     } catch (e) {
-      // A user-initiated cancel surfaces as an AbortError — not an error to show.
-      if (!(e instanceof DOMException && e.name === "AbortError")) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    } finally {
-      abortRef.current = null;
+      setError(e instanceof Error ? e.message : String(e));
       setGenerating(false);
-      if (elapsedTimer.current) {
-        clearInterval(elapsedTimer.current);
-        elapsedTimer.current = null;
-      }
     }
   }
+
+  // Resume an in-flight job after a reload / returning to the tab.
+  useEffect(() => {
+    const jobId = window.localStorage.getItem(JOB_STORAGE_KEY);
+    if (jobId) void consumeJob(jobId);
+    // consumeJob is stable for this purpose; run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-100">
@@ -320,14 +480,19 @@ export function Psalter({ initial }: { initial: Prefs }) {
             {hebrewLoading ? (
               <span className="text-stone-400 text-base">{t.hebrewLoading}</span>
             ) : (
-              hebrew.map((v, i) => (
-                <p key={i} className="mb-2">
-                  <span className="text-xs text-stone-400 align-top mx-1">
-                    {i + 1}
-                  </span>
-                  {v}
-                </p>
-              ))
+              (range ? hebrew.slice(range.start - 1, range.end) : hebrew).map(
+                (v, i) => {
+                  const num = (range ? range.start : 1) + i;
+                  return (
+                    <p key={num} className="mb-2">
+                      <span className="text-xs text-stone-400 align-top mx-1">
+                        {num}
+                      </span>
+                      {v}
+                    </p>
+                  );
+                }
+              )
             )}
           </div>
         </section>
@@ -342,7 +507,7 @@ export function Psalter({ initial }: { initial: Prefs }) {
               {Array.from({ length: 150 }, (_, i) => i + 1).map((n) => (
                 <button
                   key={n}
-                  onClick={() => setPsalm(n)}
+                  onClick={() => selectPsalmFromGrid(n)}
                   className={`text-[10px] py-1 rounded tabular-nums transition-colors ${
                     n === psalm
                       ? "bg-stone-800 text-stone-50 dark:bg-stone-200 dark:text-stone-900"
@@ -352,6 +517,39 @@ export function Psalter({ initial }: { initial: Prefs }) {
                   {n}
                 </button>
               ))}
+            </div>
+            <div className="mt-2">
+              <label className="block text-xs text-stone-500 mb-1">
+                {t.referenceLabel}
+              </label>
+              <input
+                type="text"
+                inputMode="text"
+                value={refInput}
+                onChange={(e) => {
+                  setRefInput(e.target.value);
+                  if (refError) setRefError(false);
+                }}
+                onBlur={(e) => applyReference(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyReference((e.target as HTMLInputElement).value);
+                  }
+                }}
+                placeholder={t.referencePlaceholder}
+                aria-invalid={refError}
+                className={`w-full rounded border px-2 py-1 text-sm tabular-nums bg-stone-50 dark:bg-stone-950 ${
+                  refError
+                    ? "border-red-400 dark:border-red-700"
+                    : "border-stone-300 dark:border-stone-700"
+                }`}
+              />
+              {refError && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                  {t.referenceInvalid}
+                </p>
+              )}
             </div>
           </div>
           <div>
@@ -371,6 +569,28 @@ export function Psalter({ initial }: { initial: Prefs }) {
                 } as React.CSSProperties
               }
             />
+          </div>
+          <div>
+            <label className="block text-sm mb-2">{t.meterLabel}</label>
+            <div className="flex flex-wrap gap-1">
+              {METERS.map((m) => {
+                const selected = m.id === meterId;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => selectMeter(m.id)}
+                    title={m.label}
+                    className={`text-xs px-2.5 py-1 rounded-full border tabular-nums transition-colors ${
+                      selected
+                        ? "bg-stone-900 text-stone-50 border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100"
+                        : "border-stone-300 text-stone-700 hover:border-stone-900 hover:text-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:border-stone-100 dark:hover:text-stone-100"
+                    }`}
+                  >
+                    {m.short}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <div>
             <label className="block text-sm mb-2">{t.modelLabel}</label>
