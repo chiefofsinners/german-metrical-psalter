@@ -1,5 +1,6 @@
 import type { Lang } from "./i18n";
 import { DEFAULT_METER_ID } from "./meters";
+import { DEFAULT_STYLE, STYLE_MIN, STYLE_MAX } from "./prompt";
 
 // Session-scoped UI settings. Stored in sessionStorage (per-tab, cleared when
 // the tab closes) rather than a cookie or localStorage, so each browser session
@@ -18,6 +19,8 @@ export interface Prefs {
   psalm: number;
   variants: number;
   meter: string;
+  // Literal↔poetic dial, 1 (literal) … 5 (poetic). See src/lib/prompt.ts.
+  style: number;
   // Optional verse range within the selected psalm (null = whole psalm).
   range: { start: number; end: number } | null;
 }
@@ -28,6 +31,7 @@ export const DEFAULT_PREFS: Prefs = {
   psalm: 23,
   variants: 3,
   meter: DEFAULT_METER_ID,
+  style: DEFAULT_STYLE,
   range: null,
 };
 
@@ -75,6 +79,13 @@ export function parsePrefs(raw: string | null | undefined): Prefs {
         : DEFAULT_PREFS.variants,
     meter:
       typeof o.meter === "string" && o.meter ? o.meter : DEFAULT_PREFS.meter,
+    style:
+      typeof o.style === "number" &&
+      Number.isInteger(o.style) &&
+      o.style >= STYLE_MIN &&
+      o.style <= STYLE_MAX
+        ? o.style
+        : DEFAULT_PREFS.style,
     range: parseRange(o.range),
   };
 }

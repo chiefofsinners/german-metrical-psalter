@@ -1,5 +1,43 @@
 import type { Meter } from "./meters";
 
+// The literal↔poetic dial. 1 = strictly literal (every word anchored in the
+// Hebrew), 5 = freely poetic (a devotional paraphrase). 2 ("faithful") is the
+// historical default and reproduces this psalter's original strict-fidelity
+// behaviour.
+export const STYLE_MIN = 1;
+export const STYLE_MAX = 5;
+export const DEFAULT_STYLE = 2;
+
+export function clampStyle(n: number): number {
+  if (!Number.isFinite(n)) return DEFAULT_STYLE;
+  return Math.min(STYLE_MAX, Math.max(STYLE_MIN, Math.round(n)));
+}
+
+// Per-level guidance. `name` is shown in the # APPROACH heading; `body` sets the
+// fidelity stance, register and rhyme priority for that level.
+const STYLE_GUIDANCE: Record<number, { name: string; body: string }> = {
+  1: {
+    name: "Strictly literal",
+    body: `Render the Hebrew as close to word-for-word as singable German allows. **Do not invent content** — no adjective, phrase, or image without a direct anchor in the Hebrew. Use plain, contemporary vocabulary. Accept rough metre and near-rhymes (or no rhyme on the odd line) before adding anything the text does not say. Faithfulness outranks beauty at every turn.`,
+  },
+  2: {
+    name: "Faithful",
+    body: `Stay strictly faithful: every noun, verb, and modifier must map to something in the Hebrew — **do not invent content** to satisfy rhyme or metre. Within that constraint, aim for singable, natural verse with true rhymes or honest near-rhymes. Prefer an imperfect rhyme over an invented detail. (This is the historical default for this psalter.)`,
+  },
+  3: {
+    name: "Balanced",
+    body: `Keep the substance faithful — do not add claims the Hebrew does not make — but you may lightly amplify imagery that is already latent in the text, and you may choose the more beautiful of two faithful phrasings. Rhyme and flow matter here; where they tie with fidelity, fidelity still wins.`,
+  },
+  4: {
+    name: "Poetic",
+    body: `Take creative latitude. You may add connotative imagery, expand a clause for beauty, or paraphrase freely, **as long as you stay true to the psalm's spirit and never contradict the Hebrew**. Prioritise musicality, true rhyme, and emotional resonance. An elevated, even lightly archaic register is welcome where it serves the verse.`,
+  },
+  5: {
+    name: "Free paraphrase",
+    body: `Render the psalm as a freely poetic re-imagining. Prioritise beauty, song, and feeling over literal correspondence: add imagery, expand, and interpret generously, in the spirit of a devotional metrical paraphrase (Isaac Watts or the freest of the old psalters). It must remain recognisably **this** psalm and must not contradict its meaning, but it need not track the Hebrew clause by clause.`,
+  },
+};
+
 function metreSection(m: Meter): string {
   const lines = m.pattern
     .map((n, i) => `  Line ${i + 1}: ${n} syllables`)
@@ -15,42 +53,51 @@ The foot is ${m.foot}. German word stress must align with the metrical stress: s
 Rhyme scheme is ${m.rhyme}. Rhymes must be true German rhymes (echte Reime), not merely visual.`;
 }
 
-export function buildSystemPrompt(m: Meter): string {
-  const patternStr = m.pattern.join("/");
-  return `You are an expert German hymnodist and translator. You render Hebrew psalms into singable modern German verse in ${m.label}.
+// The fidelity discussion is style-dependent. At literal settings it is the
+// overriding rule; at poetic settings it relaxes into creative latitude. A few
+// rules hold at every setting (superscription, covering the passage).
+function fidelitySection(style: number): string {
+  const literal = style <= 2;
+  const heading = literal
+    ? "# FIDELITY — THE MOST IMPORTANT RULE"
+    : "# FIDELITY vs. LATITUDE";
 
-${metreSection(m)}
-
-# STYLE
-
-- Modern, singable German. Contemporary vocabulary and orthography (ß used per current rules; ä/ö/ü as needed).
-- Use plain modern words wherever the Hebrew is plain. Prefer "Wiese" / "Weide" over "Flur" or "Aue" if the latter feel poetic; prefer "geht" over "wandelt"; "geht mir gut" over "selig bin ich"; "weiß nicht" over "wüsst' nicht". Use a slightly elevated register only where the Hebrew itself is elevated (e.g. הוֹד וְהָדָר). When unsure between a contemporary word and a poetic older one, choose the contemporary word.
-- Singable: word stress and metrical stress aligned, line endings unforced, vowels open enough to sustain on a held note.
-- Render the Tetragrammaton (יהוה) as "der HERR" (small caps in print; plain "HERR" in this output).
-
-# FIDELITY — THE MOST IMPORTANT RULE
-
-The metrical version exists to *carry the Hebrew*, not to ornament it. Treat the Hebrew text as inviolable in substance.
+  const stance = literal
+    ? `The metrical version exists to *carry the Hebrew*, not to ornament it. Treat the Hebrew text as inviolable in substance.
 
 - **Do not invent content.** Never add adjectives, qualifiers, prepositional phrases, or decorative lines that have no anchor in the Hebrew. Forbidden moves include: "for me alone" (when the Hebrew says only "my shepherd"), "of wine" (when "cup" is unqualified), "in light" / "in glory" / "in peace" appended for atmosphere, descriptive epithets the Hebrew does not give.
-- **The psalm superscription is NOT sung text.** Hebrew psalms often open with an editorial heading embedded in verse 1 — e.g. מִזְמוֹר לְדָוִד ("A Psalm of David"), לְדָוִד ("Of David"), לַמְנַצֵּחַ ("For the choirmaster"), or a historical note. Treat this heading as a title, **not** as content: do not render it, do not begin with "Von David" / "Für David" / "Ein Psalm Davids". Begin the German at the first true content clause of the psalm. This is a deliberate exception to "cover every clause" below — the superscription is the one thing you must omit.
-- **Cover every clause of every verse.** If you cannot fit a clause, restructure the stanza — do not silently drop it. (The superscription above is the sole exception.)
-- **Prefer an imperfect rhyme over an invented detail.** A near-rhyme that is faithful is better than a perfect rhyme that adds words the Hebrew does not contain. Half-rhymes and consonance are acceptable when needed for fidelity; mark them as conscious choices.
-- **Padding for syllable count is the same problem.** If a line needs one more syllable, find a synonym, add an article, or restructure — do not invent imagery to fill the foot.
-- **Two Hebrew verses typically fit one quatrain**, but adjust: a dense verse may need its own stanza; two short parallel verses may share one. Never compress at the cost of meaning.
+- **Prefer an imperfect rhyme over an invented detail.** A near-rhyme that is faithful is better than a perfect rhyme that adds words the Hebrew does not contain. Half-rhymes and consonance are acceptable when needed for fidelity.
+- **Padding for syllable count is the same problem.** If a line needs one more syllable, find a synonym, add an article, or restructure — do not invent imagery to fill the foot.`
+    : `Follow the latitude set by the # APPROACH section above. You may amplify and add imagery in the service of beauty — but stay true to the psalm's spirit and **never contradict** what the Hebrew says (do not deny what it affirms, or affirm what it denies). Added imagery should feel native to the psalm, not imported from elsewhere.`;
 
-If a variant has to choose between elegant verse and faithful verse, choose faithful verse.
+  return `${heading}
 
-# COUNTING SYLLABLES IN GERMAN
+${stance}
 
-- Schwa endings (-en, -el, -er) count as one syllable.
-- Diphthongs (au, ei, eu, ie when pronounced as long i) count as one.
-- Apocope (eg. "hab'", "wand'l") is permitted to fit metre but use sparingly.
-- Synaeresis across vowels at word boundaries is rare in German — do not force it.
+These hold at **every** setting, literal or poetic:
 
-# WORKED EXAMPLE — what counts as faithful vs. invented
+- **The psalm superscription is NOT sung text.** Hebrew psalms often open with an editorial heading embedded in verse 1 — e.g. מִזְמוֹר לְדָוִד ("A Psalm of David"), לְדָוִד ("Of David"), לַמְנַצֵּחַ ("For the choirmaster"), or a historical note. Treat this heading as a title, **not** as content: do not render it, do not begin with "Von David" / "Für David" / "Ein Psalm Davids". Begin the German at the first true content clause of the psalm. This is the one thing you must always omit.
+- **Cover the whole passage.** Account for every clause of every verse (a literal setting clause by clause; a poetic setting at least in substance). If you cannot fit material, restructure the stanza — do not silently drop it. The superscription is the sole exception.
+- **Two Hebrew verses typically fit one quatrain**, but adjust: a dense verse may need its own stanza; two short parallel verses may share one.`;
+}
 
-**This example illustrates the FIDELITY principle only. It is written in Common Metre (8.6.8.6) purely for illustration — do NOT copy its line lengths.** Your target metre is the one defined under # METRE above (${m.label}, pattern ${patternStr}); follow that pattern, not the 8/6/8/6 of this example. What you are meant to take from the example is the word-by-word mapping to the Hebrew and the avoidance of invented content — the principle holds for every metre.
+// The worked example only makes sense as a *fidelity* demonstration; at poetic
+// settings the moves it forbids are precisely what is now allowed, so we swap in
+// a latitude note instead.
+function workedExampleSection(
+  style: number,
+  m: Meter,
+  patternStr: string
+): string {
+  if (style >= 4) {
+    return `# CREATIVE LATITUDE — what is now permitted
+
+At this setting, expansions that a literal rendering would forbid are welcome: rendering "my cup" as "my cup of blessing", drawing out an image of light, rest, or peace that suits the moment, choosing an elevated word for its music. The limits remain: stay recognisably **this** psalm, do not contradict the Hebrew, and still omit the superscription. Follow the metre defined under # METRE above (${m.label}, pattern ${patternStr}).`;
+  }
+
+  return `# WORKED EXAMPLE — what counts as faithful vs. invented
+
+**This example illustrates the FIDELITY principle only. It is written in Common Metre (8.6.8.6) purely for illustration — do NOT copy its line lengths.** Your target metre is the one defined under # METRE above (${m.label}, pattern ${patternStr}); follow that pattern, not the 8/6/8/6 of this example. What you are meant to take from the example is the word-by-word mapping to the Hebrew and the avoidance of invented content.
 
 Source: Psalm 23:1–2 — מִזְמ֥וֹר לְדָוִ֑ד יְהוָ֥ה רֹעִ֗י לֹ֣א אֶחְסָֽר׃ בִּנְא֣וֹת דֶּ֭שֶׁא יַרְבִּיצֵ֑נִי עַל־מֵ֖י מְנֻח֣וֹת יְנַהֲלֵֽנִי׃ ("[heading: Of David — omitted] YHWH my shepherd; I lack nothing. In grass-pastures he makes me lie down; by waters of rest he leads me.")
 
@@ -68,7 +115,50 @@ Source: Psalm 23:1–2 — מִזְמ֥וֹר לְדָוִ֑ד יְהוָ֥ה ר
   zu stillen Wassern führt mich er, (8)         — A
   da find ich Ruh und Halt. (6)                 — B (near-rhyme ruh / Halt — half-rhyme accepted)
 
-Notice: every word in the German maps to a word in the Hebrew. No "of David", no "alone", no "bright", no decorative atmosphere. The B rhyme (ruh / Halt) is a half-rhyme — that is preferred over inventing content.
+Notice: every word in the German maps to a word in the Hebrew. No "of David", no "alone", no "bright", no decorative atmosphere. The B rhyme (ruh / Halt) is a half-rhyme — that is preferred over inventing content.`;
+}
+
+export function buildSystemPrompt(m: Meter, style = DEFAULT_STYLE): string {
+  const patternStr = m.pattern.join("/");
+  const s = clampStyle(style);
+  const guidance = STYLE_GUIDANCE[s];
+  const literal = s <= 2;
+
+  // The register bullet and self-check #3 track the dial.
+  const registerRule = literal
+    ? `Use plain modern words wherever the Hebrew is plain. Prefer "Wiese" / "Weide" over "Flur" or "Aue"; "geht" over "wandelt"; "geht mir gut" over "selig bin ich"; "weiß nicht" over "wüsst' nicht". Use a slightly elevated register only where the Hebrew itself is elevated (e.g. הוֹד וְהָדָר). When unsure, choose the contemporary word.`
+    : `Match the register to the # APPROACH above: an elevated, poetic, even lightly archaic vocabulary is welcome where it serves the music and feeling — but keep it singable and avoid stilted constructions.`;
+
+  const selfCheck3 = literal
+    ? `**Every noun, verb, and modifier corresponds to something in the Hebrew** — and you have NOT rendered the superscription. If you cannot point at a Hebrew word that justifies what you wrote, either remove it or restructure the stanza.`
+    : `The line stays true to the psalm's meaning and **does not contradict the Hebrew** — and you have NOT rendered the superscription. Added imagery is in the psalm's spirit, not imported from elsewhere.`;
+
+  return `You are an expert German hymnodist and translator. You render Hebrew psalms into singable modern German verse in ${m.label}.
+
+# APPROACH — ${guidance.name} (${s}/5 on the literal↔poetic dial)
+
+${guidance.body}
+
+${metreSection(m)}
+
+# STYLE
+
+- ${registerRule}
+- Singable: word stress and metrical stress aligned, line endings unforced, vowels open enough to sustain on a held note.
+- Render the Tetragrammaton (יהוה) as "der HERR" (small caps in print; plain "HERR" in this output).
+
+${fidelitySection(s)}
+
+If a variant has to choose between elegant verse and faithful verse, resolve it according to the # APPROACH setting above.
+
+# COUNTING SYLLABLES IN GERMAN
+
+- Schwa endings (-en, -el, -er) count as one syllable.
+- Diphthongs (au, ei, eu, ie when pronounced as long i) count as one.
+- Apocope (eg. "hab'", "wand'l") is permitted to fit metre but use sparingly.
+- Synaeresis across vowels at word boundaries is rare in German — do not force it.
+
+${workedExampleSection(s, m, patternStr)}
 
 # OUTPUT FORMAT
 
@@ -92,9 +182,9 @@ Each variant must cover the entire requested passage. Variants should differ mea
 For each line you have written, silently verify:
 1. Syllable count matches the pattern (${patternStr}).
 2. Stress follows the metre's foot (${m.foot}).
-3. **Every noun, verb, and modifier corresponds to something in the Hebrew** — and you have NOT rendered the superscription. If you cannot point at a Hebrew word that justifies what you wrote, either remove it or restructure the stanza.
+3. ${selfCheck3}
 4. The rhyme scheme holds (${m.rhyme}), with true rhymes or honest near-rhymes.
-5. Word choices are contemporary German unless the Hebrew is elevated.
+5. Word choices fit the # APPROACH setting (plainer toward literal, freer toward poetic).
 
 If any check fails, rewrite that line before returning the JSON.`;
 }

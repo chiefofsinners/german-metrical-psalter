@@ -99,6 +99,7 @@ export function Psalter() {
   // mismatch) and a mount effect re-applies any stored values.
   const [psalm, setPsalm] = useState(DEFAULT_PREFS.psalm);
   const [variantCount, setVariantCount] = useState(DEFAULT_PREFS.variants);
+  const [style, setStyle] = useState(DEFAULT_PREFS.style);
   const [model, setModel] = useState<string>(DEFAULT_PREFS.model);
   const [lang, setLang] = useState<Lang>(DEFAULT_PREFS.lang);
   const [meterId, setMeterId] = useState(DEFAULT_PREFS.meter);
@@ -139,7 +140,7 @@ export function Psalter() {
   // the closed settings modal), so loading it after mount can't cause a flash.
   // Default is meter-specific; a saved custom prompt overrides it.
   const [systemPrompt, setSystemPrompt] = useState(() =>
-    buildSystemPrompt(findMeter(DEFAULT_PREFS.meter))
+    buildSystemPrompt(findMeter(DEFAULT_PREFS.meter), DEFAULT_PREFS.style)
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState("");
@@ -162,6 +163,7 @@ export function Psalter() {
     const prefs = parsePrefs(prefsRaw);
     setPsalm(prefs.psalm);
     setVariantCount(prefs.variants);
+    setStyle(prefs.style);
     setModel(prefs.model);
     setLang(prefs.lang);
     setMeterId(prefs.meter);
@@ -175,7 +177,7 @@ export function Psalter() {
       if (usingDefaults)
         window.sessionStorage.setItem(PROMPT_STORAGE_KEY, storedPrompt);
     } else {
-      setSystemPrompt(buildSystemPrompt(findMeter(prefs.meter)));
+      setSystemPrompt(buildSystemPrompt(findMeter(prefs.meter), prefs.style));
     }
     setHasDefaults(window.localStorage.getItem(PREFS_STORAGE_KEY) != null);
     setHydrated(true);
@@ -194,10 +196,11 @@ export function Psalter() {
         psalm,
         variants: variantCount,
         meter: meterId,
+        style,
         range,
       })
     );
-  }, [hydrated, lang, model, psalm, variantCount, meterId, range]);
+  }, [hydrated, lang, model, psalm, variantCount, meterId, style, range]);
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -208,7 +211,16 @@ export function Psalter() {
   // prompt at generation time).
   function selectMeter(id: string) {
     setMeterId(id);
-    if (!promptCustomized) setSystemPrompt(buildSystemPrompt(findMeter(id)));
+    if (!promptCustomized)
+      setSystemPrompt(buildSystemPrompt(findMeter(id), style));
+  }
+
+  // The literal↔poetic dial rebuilds the default prompt (the fidelity rules are
+  // style-dependent). A customized prompt is left alone, so the slider has no
+  // effect until the prompt is reset to default.
+  function selectStyle(level: number) {
+    setStyle(level);
+    if (!promptCustomized) setSystemPrompt(buildSystemPrompt(meter, level));
   }
 
   function applyReference(value: string) {
@@ -252,6 +264,7 @@ export function Psalter() {
         psalm,
         variants: variantCount,
         meter: meterId,
+        style,
         range,
       })
     );
@@ -276,7 +289,7 @@ export function Psalter() {
     setSettingsOpen(true);
   }
   function savePrompt() {
-    const isCustom = promptDraft !== buildSystemPrompt(meter);
+    const isCustom = promptDraft !== buildSystemPrompt(meter, style);
     setSystemPrompt(promptDraft);
     setPromptCustomized(isCustom);
     if (isCustom) {
@@ -287,7 +300,7 @@ export function Psalter() {
     setSettingsOpen(false);
   }
   function resetPrompt() {
-    const fresh = buildSystemPrompt(meter);
+    const fresh = buildSystemPrompt(meter, style);
     setSystemPrompt(fresh);
     setPromptDraft(fresh);
     window.sessionStorage.removeItem(PROMPT_STORAGE_KEY);
@@ -665,7 +678,7 @@ export function Psalter() {
                   }}
                   placeholder={t.referencePlaceholder}
                   aria-invalid={refError}
-                  className={`w-full rounded border py-1.5 pl-2.5 text-sm tabular-nums bg-stone-50 dark:bg-stone-950 ${
+                  className={`w-full rounded border py-1.5 pl-2.5 text-sm tabular-nums bg-stone-50 dark:bg-stone-950 outline-none focus:ring-2 focus:ring-stone-400 dark:focus:ring-stone-500 focus:border-stone-400 dark:focus:border-stone-500 ${
                     refInput || range ? "pr-8" : "pr-2.5"
                   } ${
                     refError
@@ -753,6 +766,29 @@ export function Psalter() {
                 } as React.CSSProperties
               }
             />
+          </div>
+          <div>
+            <label className="block text-sm mb-1">
+              {t.styleLabel}{" "}
+              <span className="text-stone-400">— {t.styleNames[style - 1]}</span>
+            </label>
+            <input
+              type="range"
+              min={1}
+              max={5}
+              value={style}
+              onChange={(e) => selectStyle(Number(e.target.value))}
+              className="variants-slider w-full"
+              style={
+                {
+                  "--p": `${((style - 1) / 4) * 100}%`,
+                } as React.CSSProperties
+              }
+            />
+            <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-stone-400">
+              <span>{t.styleLiteral}</span>
+              <span>{t.stylePoetic}</span>
+            </div>
           </div>
           <div>
             <button
