@@ -5,9 +5,10 @@ import { STRINGS, type Lang } from "@/lib/i18n";
 import { buildSystemPrompt } from "@/lib/prompt";
 import { METERS, findMeter } from "@/lib/meters";
 import {
-  type Prefs,
+  DEFAULT_PREFS,
+  PREFS_STORAGE_KEY,
   PROMPT_STORAGE_KEY,
-  serializePrefsCookie,
+  parsePrefs,
 } from "@/lib/prefs";
 
 // Parse a psalm reference into a psalm and optional verse range. Accepts
@@ -92,25 +93,31 @@ type JobRef = {
   variants: number;
 };
 
-export function Psalter({ initial }: { initial: Prefs }) {
-  // Cookie-backed prefs are initialized from props (rendered identically on the
-  // server), so there's no flash and no hydration mismatch.
-  const [psalm, setPsalm] = useState(initial.psalm);
-  const [variantCount, setVariantCount] = useState(initial.variants);
-  const [model, setModel] = useState<string>(initial.model);
-  const [lang, setLang] = useState<Lang>(initial.lang);
-  const [meterId, setMeterId] = useState(initial.meter);
+export function Psalter() {
+  // All settings are session-scoped. The server can't read sessionStorage, so
+  // state initializes from defaults (matching the SSR HTML — no hydration
+  // mismatch) and a mount effect re-applies any stored values.
+  const [psalm, setPsalm] = useState(DEFAULT_PREFS.psalm);
+  const [variantCount, setVariantCount] = useState(DEFAULT_PREFS.variants);
+  const [model, setModel] = useState<string>(DEFAULT_PREFS.model);
+  const [lang, setLang] = useState<Lang>(DEFAULT_PREFS.lang);
+  const [meterId, setMeterId] = useState(DEFAULT_PREFS.meter);
   // Optional verse range within the selected psalm (null = whole psalm).
   const [range, setRange] = useState<{ start: number; end: number } | null>(
-    null
+    DEFAULT_PREFS.range
   );
   const [refInput, setRefInput] = useState("");
   const [refError, setRefError] = useState(false);
   const [meterOpen, setMeterOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
-  const [promptCustomized, setPromptCustomized] = useState(
-    initial.promptCustomized
-  );
+  const [promptCustomized, setPromptCustomized] = useState(false);
+  // Becomes true once stored settings have been read; gates the persist effect
+  // so it doesn't clobber sessionStorage with defaults before the load runs.
+  const [hydrated, setHydrated] = useState(false);
+  // Whether localStorage holds saved defaults (controls the "Clear" link), and a
+  // transient flag for the "Saved ✓" confirmation after pressing save.
+  const [hasDefaults, setHasDefaults] = useState(false);
+  const [defaultsSaved, setDefaultsSaved] = useState(false);
   const meter = findMeter(meterId);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<Provider>>(
@@ -127,12 +134,12 @@ export function Psalter({ initial }: { initial: Prefs }) {
   // What the in-flight (or last) job was started with, so the output header
   // reflects what's actually being generated, not later edits to the controls.
   const [submitted, setSubmitted] = useState<JobRef | null>(null);
-  // The prompt text lives in localStorage (too big for a cookie). It isn't
-  // rendered on first paint (only inside the closed settings modal), so loading
-  // it after mount can't cause a flash; the dot uses `promptCustomized` instead.
+  // The prompt text lives in its own sessionStorage key (too big to bundle with
+  // the other prefs comfortably). It isn't rendered on first paint (only inside
+  // the closed settings modal), so loading it after mount can't cause a flash.
   // Default is meter-specific; a saved custom prompt overrides it.
   const [systemPrompt, setSystemPrompt] = useState(() =>
-    buildSystemPrompt(findMeter(initial.meter))
+    buildSystemPrompt(findMeter(DEFAULT_PREFS.meter))
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptDraft, setPromptDraft] = useState("");
@@ -142,33 +149,59 @@ export function Psalter({ initial }: { initial: Prefs }) {
   const startRef = useRef<number>(0);
   const t = STRINGS[lang];
 
-  // Persist cookie-backed prefs whenever they change (also writes the initial
-  // values, which is harmless).
+  // Load stored settings once after mount, then mark hydrated so the persist
+  // effect can start writing. Within a tab the session copy governs; on a fresh
+  // session (no session copy yet) we seed from the saved defaults in
+  // localStorage, if any. A saved custom prompt (presence of the prompt key)
+  // overrides the meter default, so presence ⇒ customized.
   useEffect(() => {
-    document.cookie = serializePrefsCookie({
-      lang,
-      model,
-      psalm,
-      variants: variantCount,
-      meter: meterId,
-      promptCustomized,
-    });
-  }, [lang, model, psalm, variantCount, meterId, promptCustomized]);
+    const sessionPrefs = window.sessionStorage.getItem(PREFS_STORAGE_KEY);
+    const usingDefaults = sessionPrefs == null;
+    const store = usingDefaults ? window.localStorage : window.sessionStorage;
+    const prefsRaw = sessionPrefs ?? window.localStorage.getItem(PREFS_STORAGE_KEY);
+    const prefs = parsePrefs(prefsRaw);
+    setPsalm(prefs.psalm);
+    setVariantCount(prefs.variants);
+    setModel(prefs.model);
+    setLang(prefs.lang);
+    setMeterId(prefs.meter);
+    setRange(prefs.range);
+    const storedPrompt = store.getItem(PROMPT_STORAGE_KEY);
+    if (storedPrompt) {
+      setSystemPrompt(storedPrompt);
+      setPromptCustomized(true);
+      // Mirror the seeded prompt into the session so it survives reloads within
+      // this tab (later reads are session-only once prefs are written below).
+      if (usingDefaults)
+        window.sessionStorage.setItem(PROMPT_STORAGE_KEY, storedPrompt);
+    } else {
+      setSystemPrompt(buildSystemPrompt(findMeter(prefs.meter)));
+    }
+    setHasDefaults(window.localStorage.getItem(PREFS_STORAGE_KEY) != null);
+    setHydrated(true);
+  }, []);
+
+  // Persist prefs to sessionStorage whenever they change, but only after the
+  // initial load (gated by `hydrated`) so we never overwrite stored values with
+  // the defaults rendered on first paint.
+  useEffect(() => {
+    if (!hydrated) return;
+    window.sessionStorage.setItem(
+      PREFS_STORAGE_KEY,
+      JSON.stringify({
+        lang,
+        model,
+        psalm,
+        variants: variantCount,
+        meter: meterId,
+        range,
+      })
+    );
+  }, [hydrated, lang, model, psalm, variantCount, meterId, range]);
 
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
-
-  // A saved custom prompt (presence in localStorage) overrides the meter
-  // default; load it after mount. We only write localStorage when the user
-  // saves a custom prompt, so presence ⇒ customized.
-  useEffect(() => {
-    const stored = window.localStorage.getItem(PROMPT_STORAGE_KEY);
-    if (stored) {
-      setSystemPrompt(stored);
-      setPromptCustomized(true);
-    }
-  }, []);
 
   // Choosing a metre updates the default prompt (unless the user has customized
   // it — then their text is left alone and the metre still rides in the user
@@ -200,6 +233,36 @@ export function Psalter({ initial }: { initial: Prefs }) {
     setRefError(false);
   }
 
+  // Copy the current (session) settings into localStorage so new tabs/sessions
+  // start from them. The live session copy still governs edits in this tab.
+  function saveAsDefaults() {
+    window.localStorage.setItem(
+      PREFS_STORAGE_KEY,
+      JSON.stringify({
+        lang,
+        model,
+        psalm,
+        variants: variantCount,
+        meter: meterId,
+        range,
+      })
+    );
+    if (promptCustomized) {
+      window.localStorage.setItem(PROMPT_STORAGE_KEY, systemPrompt);
+    } else {
+      window.localStorage.removeItem(PROMPT_STORAGE_KEY);
+    }
+    setHasDefaults(true);
+    setDefaultsSaved(true);
+    window.setTimeout(() => setDefaultsSaved(false), 1800);
+  }
+
+  function clearDefaults() {
+    window.localStorage.removeItem(PREFS_STORAGE_KEY);
+    window.localStorage.removeItem(PROMPT_STORAGE_KEY);
+    setHasDefaults(false);
+  }
+
   function openSettings() {
     setPromptDraft(systemPrompt);
     setSettingsOpen(true);
@@ -209,9 +272,9 @@ export function Psalter({ initial }: { initial: Prefs }) {
     setSystemPrompt(promptDraft);
     setPromptCustomized(isCustom);
     if (isCustom) {
-      window.localStorage.setItem(PROMPT_STORAGE_KEY, promptDraft);
+      window.sessionStorage.setItem(PROMPT_STORAGE_KEY, promptDraft);
     } else {
-      window.localStorage.removeItem(PROMPT_STORAGE_KEY);
+      window.sessionStorage.removeItem(PROMPT_STORAGE_KEY);
     }
     setSettingsOpen(false);
   }
@@ -219,7 +282,7 @@ export function Psalter({ initial }: { initial: Prefs }) {
     const fresh = buildSystemPrompt(meter);
     setSystemPrompt(fresh);
     setPromptDraft(fresh);
-    window.localStorage.removeItem(PROMPT_STORAGE_KEY);
+    window.sessionStorage.removeItem(PROMPT_STORAGE_KEY);
     setPromptCustomized(false);
   }
 
@@ -236,20 +299,22 @@ export function Psalter({ initial }: { initial: Prefs }) {
   useEffect(() => {
     fetch("/api/models")
       .then((r) => r.json())
-      .then((d) => {
-        const list: ModelInfo[] = d.models ?? [];
-        setModels(list);
-        // Expand the provider group holding the selected model so it's visible.
-        const selected = list.find((m) => m.id === initial.model);
-        if (selected) {
-          setCollapsedProviders((prev) => {
-            const next = new Set(prev);
-            next.delete(selected.provider);
-            return next;
-          });
-        }
-      });
-  }, [initial.model]);
+      .then((d) => setModels((d.models as ModelInfo[]) ?? []));
+  }, []);
+
+  // Expand the provider group holding the selected model so it's visible. Runs
+  // once models have loaded and whenever the selected model changes (e.g. after
+  // session settings are restored on mount).
+  useEffect(() => {
+    const selected = models.find((m) => m.id === model);
+    if (!selected) return;
+    setCollapsedProviders((prev) => {
+      if (!prev.has(selected.provider)) return prev;
+      const next = new Set(prev);
+      next.delete(selected.provider);
+      return next;
+    });
+  }, [models, model]);
 
   useEffect(() => {
     let cancelled = false;
@@ -786,6 +851,23 @@ export function Psalter({ initial }: { initial: Prefs }) {
                 );
               })}
             </div>
+            )}
+          </div>
+          <div className="pt-3 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between gap-2">
+            <button
+              onClick={saveAsDefaults}
+              title={t.saveDefaultsHint}
+              className="text-xs text-stone-500 hover:text-stone-800 dark:hover:text-stone-200"
+            >
+              {defaultsSaved ? t.saveDefaultsDone : t.saveDefaults}
+            </button>
+            {hasDefaults && (
+              <button
+                onClick={clearDefaults}
+                className="text-xs text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+              >
+                {t.clearDefaults}
+              </button>
             )}
           </div>
         </aside>

@@ -1,14 +1,14 @@
 import type { Lang } from "./i18n";
 import { DEFAULT_METER_ID } from "./meters";
 
-// Persisted UI preferences. Stored in a cookie (not just localStorage) so the
-// server can read them and render the correct content on the first paint — no
-// flash from defaults, and the page is never blank if client JS is slow/fails.
-// The system prompt text itself stays in localStorage (too large for a cookie);
-// only a `promptCustomized` flag rides in the cookie so the settings dot renders
-// correctly server-side.
+// Session-scoped UI settings. Stored in sessionStorage (per-tab, cleared when
+// the tab closes) rather than a cookie or localStorage, so each browser session
+// starts fresh from the defaults below. Nothing is read on the server, so the
+// first paint always shows defaults and the client re-applies stored settings
+// after mount. The system prompt text rides in a separate sessionStorage key
+// (PROMPT_STORAGE_KEY) because it can be large.
 
-export const PREFS_COOKIE = "psalter.prefs";
+export const PREFS_STORAGE_KEY = "psalter.prefs";
 export const PROMPT_STORAGE_KEY = "psalter.systemPrompt";
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
 
@@ -18,7 +18,8 @@ export interface Prefs {
   psalm: number;
   variants: number;
   meter: string;
-  promptCustomized: boolean;
+  // Optional verse range within the selected psalm (null = whole psalm).
+  range: { start: number; end: number } | null;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -27,10 +28,26 @@ export const DEFAULT_PREFS: Prefs = {
   psalm: 23,
   variants: 3,
   meter: DEFAULT_METER_ID,
-  promptCustomized: false,
+  range: null,
 };
 
-export function parsePrefs(raw: string | undefined): Prefs {
+function parseRange(r: unknown): Prefs["range"] {
+  if (!r || typeof r !== "object") return null;
+  const o = r as { start?: unknown; end?: unknown };
+  if (
+    typeof o.start === "number" &&
+    typeof o.end === "number" &&
+    Number.isInteger(o.start) &&
+    Number.isInteger(o.end) &&
+    o.start >= 1 &&
+    o.start <= o.end
+  ) {
+    return { start: o.start, end: o.end };
+  }
+  return null;
+}
+
+export function parsePrefs(raw: string | null | undefined): Prefs {
   if (!raw) return DEFAULT_PREFS;
   let o: Partial<Prefs>;
   try {
@@ -58,13 +75,6 @@ export function parsePrefs(raw: string | undefined): Prefs {
         : DEFAULT_PREFS.variants,
     meter:
       typeof o.meter === "string" && o.meter ? o.meter : DEFAULT_PREFS.meter,
-    promptCustomized: o.promptCustomized === true,
+    range: parseRange(o.range),
   };
-}
-
-// Serialize prefs to a cookie string. Used on the client to persist changes;
-// a one-year max-age, lax same-site, root path.
-export function serializePrefsCookie(prefs: Prefs): string {
-  const value = encodeURIComponent(JSON.stringify(prefs));
-  return `${PREFS_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`;
 }

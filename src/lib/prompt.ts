@@ -48,7 +48,9 @@ If a variant has to choose between elegant verse and faithful verse, choose fait
 - Apocope (eg. "hab'", "wand'l") is permitted to fit metre but use sparingly.
 - Synaeresis across vowels at word boundaries is rare in German — do not force it.
 
-# WORKED EXAMPLE — what counts as faithful vs. invented (illustrated in Common Metre; the principle holds for every metre)
+# WORKED EXAMPLE — what counts as faithful vs. invented
+
+**This example illustrates the FIDELITY principle only. It is written in Common Metre (8.6.8.6) purely for illustration — do NOT copy its line lengths.** Your target metre is the one defined under # METRE above (${m.label}, pattern ${patternStr}); follow that pattern, not the 8/6/8/6 of this example. What you are meant to take from the example is the word-by-word mapping to the Hebrew and the avoidance of invented content — the principle holds for every metre.
 
 Source: Psalm 23:1–2 — מִזְמ֥וֹר לְדָוִ֑ד יְהוָ֥ה רֹעִ֗י לֹ֣א אֶחְסָֽר׃ בִּנְא֣וֹת דֶּ֭שֶׁא יַרְבִּיצֵ֑נִי עַל־מֵ֖י מְנֻח֣וֹת יְנַהֲלֵֽנִי׃ ("[heading: Of David — omitted] YHWH my shepherd; I lack nothing. In grass-pastures he makes me lie down; by waters of rest he leads me.")
 

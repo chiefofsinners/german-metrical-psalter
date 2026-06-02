@@ -44,6 +44,11 @@ export const STRINGS = {
     promptHint:
       "Sent to the model on every generation. Saved in your browser.",
     settings: "Settings",
+    saveDefaults: "Save as defaults",
+    saveDefaultsDone: "Saved ✓",
+    saveDefaultsHint:
+      "Remember the current settings so new tabs and sessions start with them.",
+    clearDefaults: "Clear saved defaults",
   },
   de: {
     appTitle: "Deutscher metrischer Psalter",
@@ -88,5 +93,10 @@ export const STRINGS = {
     promptHint:
       "Wird bei jeder Erzeugung an das Modell gesendet. Im Browser gespeichert.",
     settings: "Einstellungen",
+    saveDefaults: "Als Standard speichern",
+    saveDefaultsDone: "Gespeichert ✓",
+    saveDefaultsHint:
+      "Aktuelle Einstellungen merken, damit neue Tabs und Sitzungen damit starten.",
+    clearDefaults: "Standard löschen",
   },
 } as const satisfies Record<Lang, unknown>;
