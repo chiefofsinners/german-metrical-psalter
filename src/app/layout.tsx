@@ -19,18 +19,18 @@ export const metadata: Metadata = {
   ),
   title: "German Metrical Psalter",
   description:
-    "Generates German Common Metre renderings of the Hebrew Psalms.",
+    "Generates singable German metrical renderings of the Hebrew Psalms.",
   openGraph: {
     title: "German Metrical Psalter",
     description:
-      "Hebrew Psalms rendered into singable modern German Common Metre.",
+      "Hebrew Psalms rendered into singable modern German verse, in the metre of your choice.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "German Metrical Psalter",
     description:
-      "Hebrew Psalms rendered into singable modern German Common Metre.",
+      "Hebrew Psalms rendered into singable modern German verse, in the metre of your choice.",
   },
 };
 

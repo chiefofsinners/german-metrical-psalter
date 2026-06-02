@@ -4,7 +4,7 @@ export const STRINGS = {
   en: {
     appTitle: "German Metrical Psalter",
     appSubtitle:
-      "Renders the Hebrew Psalms into singable modern German Common Metre (8.6.8.6, iambic).",
+      "Renders the Hebrew Psalms into singable modern German verse — in the metre of your choice.",
     hebrewHeader: (n: number) => `Hebrew — Psalm ${n}`,
     hebrewLoading: "Loading…",
     psalmLabel: "Psalm",
@@ -12,13 +12,14 @@ export const STRINGS = {
     referencePlaceholder: "e.g. 119:1-6",
     referenceInvalid: "Couldn’t read that reference",
     variantsLabel: (n: number) => `Variants: ${n}`,
+    variantsCount: (n: number) => `${n} variant${n === 1 ? "" : "s"}`,
     meterLabel: "Metre",
     modelLabel: "Model",
     missingKey: (provider: string) => `Missing API key for ${provider}`,
     generate: "Generate",
     generating: (s: number) => `Generating… ${s}s`,
     cancel: "Cancel",
-    outputHeader: "German Common Metre",
+    outputHeader: "German rendering",
     pressGenerate: (psalm: number, n: number) =>
       `Press Generate to render Psalm ${psalm} into ${n} version${n === 1 ? "" : "s"}.`,
     composing: (s: number) =>
@@ -47,7 +48,7 @@ export const STRINGS = {
   de: {
     appTitle: "Deutscher metrischer Psalter",
     appSubtitle:
-      "Vertont die hebräischen Psalmen als singbares modernes Deutsch im Common Metre (8.6.8.6, jambisch).",
+      "Vertont die hebräischen Psalmen als singbares modernes Deutsch — im Versmaß deiner Wahl.",
     hebrewHeader: (n: number) => `Hebräisch — Psalm ${n}`,
     hebrewLoading: "Laden…",
     psalmLabel: "Psalm",
@@ -55,13 +56,14 @@ export const STRINGS = {
     referencePlaceholder: "z. B. 119:1-6",
     referenceInvalid: "Stelle nicht erkannt",
     variantsLabel: (n: number) => `Fassungen: ${n}`,
+    variantsCount: (n: number) => `${n} Fassung${n === 1 ? "" : "en"}`,
     meterLabel: "Versmaß",
     modelLabel: "Modell",
     missingKey: (provider: string) => `Kein API-Schlüssel für ${provider}`,
     generate: "Erzeugen",
     generating: (s: number) => `Erzeuge… ${s}s`,
     cancel: "Abbrechen",
-    outputHeader: "Deutsch im Common Metre",
+    outputHeader: "Deutsche Fassung",
     pressGenerate: (psalm: number, n: number) =>
       `Drücke „Erzeugen", um Psalm ${psalm} in ${n} Fassung${n === 1 ? "" : "en"} zu setzen.`,
     composing: (s: number) =>

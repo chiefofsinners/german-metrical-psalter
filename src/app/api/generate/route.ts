@@ -5,7 +5,7 @@ import { buildSystemPrompt, buildUserPrompt } from "@/lib/prompt";
 import { findMeter } from "@/lib/meters";
 import { findModel, MODELS, discoverLMStudioModels } from "@/lib/providers";
 import { getRedis } from "@/lib/redis";
-import { writeJob } from "@/lib/jobs";
+import { writeJob, setRunId } from "@/lib/jobs";
 import type { generatePsalm } from "@/trigger/generate";
 
 export const runtime = "nodejs";
@@ -111,13 +111,15 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    await tasks.trigger<typeof generatePsalm>("generate-psalm", {
+    const handle = await tasks.trigger<typeof generatePsalm>("generate-psalm", {
       id,
       model,
       systemPrompt,
       userPrompt: buildUserPrompt(psalm, verses, variants, meter, startVerse),
       createdAt,
     });
+    // Remember the Trigger run id so cancel can stop the run on its infra.
+    await setRunId(id, handle.id);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[generate] failed to enqueue job=${id}`, err);

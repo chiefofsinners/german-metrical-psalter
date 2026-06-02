@@ -1,15 +1,26 @@
-import { requestCancel } from "@/lib/jobs";
+import { runs } from "@trigger.dev/sdk/v3";
+import { markCancelled, getRunId } from "@/lib/jobs";
 
 export const runtime = "nodejs";
 
-// Explicit cancel: sets a flag the background worker polls and acts on by
-// aborting the model request. Decoupled from any connection, unlike the old
-// connection-drop cancellation.
+// Cancel the Trigger.dev run (stops the compute on Trigger's infra), then flip
+// the job to cancelled in Redis so the UI updates immediately. Done after the
+// cancel so a late progress snapshot from the dying worker can't resurrect it.
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  await requestCancel(id);
+
+  const runId = await getRunId(id);
+  if (runId) {
+    try {
+      await runs.cancel(runId);
+    } catch (err) {
+      console.error(`[cancel] runs.cancel failed for ${runId}`, err);
+    }
+  }
+
+  await markCancelled(id);
   return Response.json({ ok: true });
 }

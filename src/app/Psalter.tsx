@@ -78,6 +78,20 @@ const PROVIDER_ORDER: Provider[] = [
 
 const JOB_STORAGE_KEY = "psalter.activeJob";
 
+// What a job was launched with — shown above the output and persisted with the
+// job id so a reload restores the correct labels.
+type JobRef = {
+  psalm: number;
+  range: { start: number; end: number } | null;
+  meterId: string;
+  model: string;
+  // Captured at submit so the output label is self-contained on reload (no
+  // dependency on the model list having loaded).
+  modelLabel: string;
+  provider?: Provider;
+  variants: number;
+};
+
 export function Psalter({ initial }: { initial: Prefs }) {
   // Cookie-backed prefs are initialized from props (rendered identically on the
   // server), so there's no flash and no hydration mismatch.
@@ -110,12 +124,9 @@ export function Psalter({ initial }: { initial: Prefs }) {
   const [streamingText, setStreamingText] = useState("");
   const [reasoningCount, setReasoningCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  // The psalm + verse range the in-flight (or last) job was started with, so the
-  // output header reflects what's actually being generated, not later edits.
-  const [submitted, setSubmitted] = useState<{
-    psalm: number;
-    range: { start: number; end: number } | null;
-  } | null>(null);
+  // What the in-flight (or last) job was started with, so the output header
+  // reflects what's actually being generated, not later edits to the controls.
+  const [submitted, setSubmitted] = useState<JobRef | null>(null);
   // The prompt text lives in localStorage (too big for a cookie). It isn't
   // rendered on first paint (only inside the closed settings modal), so loading
   // it after mount can't cause a flash; the dot uses `promptCustomized` instead.
@@ -269,16 +280,14 @@ export function Psalter({ initial }: { initial: Prefs }) {
   // Follow a job to completion: live SSE tail first, falling back to polling if
   // the stream drops. The job itself runs server-side regardless, so neither
   // channel dropping loses work — and we can resume from the id at any time.
-  async function consumeJob(
-    jobId: string,
-    ref?: { psalm: number; range: { start: number; end: number } | null }
-  ) {
+  async function consumeJob(jobId: string, ref?: JobRef) {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     activeJobRef.current = jobId;
-    // Persist the id AND the reference so a reload can restore the header.
-    window.localStorage.setItem(
+    // Persist (per-tab via sessionStorage) the id AND the reference so a reload
+    // restores this tab's job — without other tabs picking it up.
+    window.sessionStorage.setItem(
       JOB_STORAGE_KEY,
       JSON.stringify({ id: jobId, ref: ref ?? null })
     );
@@ -300,7 +309,7 @@ export function Psalter({ initial }: { initial: Prefs }) {
     const stop = () => {
       if (activeJobRef.current === jobId) {
         activeJobRef.current = null;
-        window.localStorage.removeItem(JOB_STORAGE_KEY);
+        window.sessionStorage.removeItem(JOB_STORAGE_KEY);
         setGenerating(false);
         if (elapsedTimer.current) {
           clearInterval(elapsedTimer.current);
@@ -393,7 +402,16 @@ export function Psalter({ initial }: { initial: Prefs }) {
   }
 
   async function generate() {
-    const ref = { psalm, range };
+    const selected = models.find((m) => m.id === model);
+    const ref: JobRef = {
+      psalm,
+      range,
+      meterId,
+      model,
+      modelLabel: selected?.label ?? model,
+      provider: selected?.provider,
+      variants: variantCount,
+    };
     setGenerating(true);
     setError(null);
     setSubmitted(ref);
@@ -426,17 +444,17 @@ export function Psalter({ initial }: { initial: Prefs }) {
 
   // Resume an in-flight job after a reload / returning to the tab.
   useEffect(() => {
-    const raw = window.localStorage.getItem(JOB_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(JOB_STORAGE_KEY);
     if (!raw) return;
     try {
       const { id, ref } = JSON.parse(raw) as {
         id: string;
-        ref: { psalm: number; range: { start: number; end: number } | null } | null;
+        ref: JobRef | null;
       };
       if (id) void consumeJob(id, ref ?? undefined);
     } catch {
       // Malformed entry — drop it.
-      window.localStorage.removeItem(JOB_STORAGE_KEY);
+      window.sessionStorage.removeItem(JOB_STORAGE_KEY);
     }
     // consumeJob is stable for this purpose; run once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -779,12 +797,28 @@ export function Psalter({ initial }: { initial: Prefs }) {
             </h2>
             {(generating || result) &&
               (() => {
-                const ref = submitted ?? { psalm, range };
+                const live = models.find((x) => x.id === model);
+                const ref: JobRef = submitted ?? {
+                  psalm,
+                  range,
+                  meterId,
+                  model,
+                  modelLabel: live?.label ?? model,
+                  provider: live?.provider,
+                  variants: variantCount,
+                };
                 return (
-                  <p className="font-serif text-lg tabular-nums text-stone-700 dark:text-stone-300">
-                    Psalm {ref.psalm}
-                    {ref.range ? `:${ref.range.start}–${ref.range.end}` : ""}
-                  </p>
+                  <div className="space-y-0.5">
+                    <p className="font-serif text-lg tabular-nums text-stone-700 dark:text-stone-300">
+                      Psalm {ref.psalm}
+                      {ref.range ? `:${ref.range.start}–${ref.range.end}` : ""}
+                    </p>
+                    <p className="text-xs text-stone-400">
+                      {findMeter(ref.meterId).short} · {t.variantsCount(ref.variants)} ·{" "}
+                      {ref.provider ? `${PROVIDER_LABEL[ref.provider]} · ` : ""}
+                      {ref.modelLabel}
+                    </p>
+                  </div>
                 );
               })()}
           </div>

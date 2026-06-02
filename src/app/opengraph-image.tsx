@@ -47,7 +47,7 @@ export default async function OGImage() {
             German Metrical Psalter
           </div>
           <div style={{ fontSize: 32, color: "#a8a29e", lineHeight: 1.3 }}>
-            Hebrew Psalms rendered into singable modern German Common Metre
+            Hebrew Psalms rendered into singable modern German metrical verse
           </div>
         </div>
       </div>

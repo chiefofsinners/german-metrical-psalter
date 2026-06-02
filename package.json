@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "build:psalms": "tsx scripts/build-psalms-data.ts"
+    "build:psalms": "tsx scripts/build-psalms-data.ts",
+    "trigger:dev": "npx trigger.dev@latest dev",
+    "trigger:deploy": "npx trigger.dev@latest deploy"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
