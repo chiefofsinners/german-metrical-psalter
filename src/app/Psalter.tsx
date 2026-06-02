@@ -110,6 +110,12 @@ export function Psalter({ initial }: { initial: Prefs }) {
   const [streamingText, setStreamingText] = useState("");
   const [reasoningCount, setReasoningCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // The psalm + verse range the in-flight (or last) job was started with, so the
+  // output header reflects what's actually being generated, not later edits.
+  const [submitted, setSubmitted] = useState<{
+    psalm: number;
+    range: { start: number; end: number } | null;
+  } | null>(null);
   // The prompt text lives in localStorage (too big for a cookie). It isn't
   // rendered on first paint (only inside the closed settings modal), so loading
   // it after mount can't cause a flash; the dot uses `promptCustomized` instead.
@@ -263,12 +269,20 @@ export function Psalter({ initial }: { initial: Prefs }) {
   // Follow a job to completion: live SSE tail first, falling back to polling if
   // the stream drops. The job itself runs server-side regardless, so neither
   // channel dropping loses work — and we can resume from the id at any time.
-  async function consumeJob(jobId: string) {
+  async function consumeJob(
+    jobId: string,
+    ref?: { psalm: number; range: { start: number; end: number } | null }
+  ) {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     activeJobRef.current = jobId;
-    window.localStorage.setItem(JOB_STORAGE_KEY, jobId);
+    // Persist the id AND the reference so a reload can restore the header.
+    window.localStorage.setItem(
+      JOB_STORAGE_KEY,
+      JSON.stringify({ id: jobId, ref: ref ?? null })
+    );
+    if (ref) setSubmitted(ref);
 
     setGenerating(true);
     setError(null);
@@ -379,8 +393,10 @@ export function Psalter({ initial }: { initial: Prefs }) {
   }
 
   async function generate() {
+    const ref = { psalm, range };
     setGenerating(true);
     setError(null);
+    setSubmitted(ref);
     try {
       const r = await fetch("/api/generate", {
         method: "POST",
@@ -401,7 +417,7 @@ export function Psalter({ initial }: { initial: Prefs }) {
         setGenerating(false);
         return;
       }
-      void consumeJob(data.jobId);
+      void consumeJob(data.jobId, ref);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setGenerating(false);
@@ -410,8 +426,18 @@ export function Psalter({ initial }: { initial: Prefs }) {
 
   // Resume an in-flight job after a reload / returning to the tab.
   useEffect(() => {
-    const jobId = window.localStorage.getItem(JOB_STORAGE_KEY);
-    if (jobId) void consumeJob(jobId);
+    const raw = window.localStorage.getItem(JOB_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const { id, ref } = JSON.parse(raw) as {
+        id: string;
+        ref: { psalm: number; range: { start: number; end: number } | null } | null;
+      };
+      if (id) void consumeJob(id, ref ?? undefined);
+    } catch {
+      // Malformed entry — drop it.
+      window.localStorage.removeItem(JOB_STORAGE_KEY);
+    }
     // consumeJob is stable for this purpose; run once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -747,9 +773,21 @@ export function Psalter({ initial }: { initial: Prefs }) {
         </aside>
 
         <section className="min-w-0 space-y-6">
-          <h2 className="text-sm uppercase tracking-wider text-stone-500">
-            {t.outputHeader}
-          </h2>
+          <div className="space-y-1">
+            <h2 className="text-sm uppercase tracking-wider text-stone-500">
+              {t.outputHeader}
+            </h2>
+            {(generating || result) &&
+              (() => {
+                const ref = submitted ?? { psalm, range };
+                return (
+                  <p className="font-serif text-lg tabular-nums text-stone-700 dark:text-stone-300">
+                    Psalm {ref.psalm}
+                    {ref.range ? `:${ref.range.start}–${ref.range.end}` : ""}
+                  </p>
+                );
+              })()}
+          </div>
           {!result && !generating && (
             <p className="text-stone-400 italic">
               {t.pressGenerate(psalm, variantCount)}
