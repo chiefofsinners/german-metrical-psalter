@@ -480,6 +480,12 @@ export function Psalter() {
     setGenerating(true);
     setError(null);
     setSubmitted(ref);
+    // Clear the previous output immediately so it doesn't linger during the
+    // POST round-trip (consumeJob also clears these, but only once the job id
+    // comes back).
+    setResult(null);
+    setStreamingText("");
+    setReasoningCount(0);
     try {
       const r = await fetch("/api/generate", {
         method: "POST",
