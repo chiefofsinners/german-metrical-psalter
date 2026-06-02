@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { tasks } from "@trigger.dev/sdk/v3";
 import { getPsalm } from "@/lib/psalms";
-import { buildSystemPrompt, buildUserPrompt } from "@/lib/prompt";
+import { buildSystemPrompt, buildUserPrompt, clampStyle } from "@/lib/prompt";
 import { findMeter } from "@/lib/meters";
 import { findModel, MODELS, discoverLMStudioModels } from "@/lib/providers";
 import { getRedis } from "@/lib/redis";
@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
     model?: string;
     systemPrompt?: string;
     meter?: string;
+    style?: number;
     verseStart?: number;
     verseEnd?: number;
   };
@@ -46,10 +47,14 @@ export async function POST(req: NextRequest) {
   const variants = Number(body.variants ?? 3);
   const modelId = body.model ?? "claude-sonnet-4-6";
   const meter = findMeter(body.meter);
+  // The literal↔poetic dial. The client bakes it into the system prompt it
+  // sends, so here it's mainly for logging and for the (rare) fallback when no
+  // system prompt is supplied.
+  const style = clampStyle(Number(body.style));
   const systemPrompt =
     typeof body.systemPrompt === "string" && body.systemPrompt.trim()
       ? body.systemPrompt
-      : buildSystemPrompt(meter);
+      : buildSystemPrompt(meter, style);
 
   if (!Number.isInteger(psalm) || psalm < 1 || psalm > 150) {
     return json(400, { error: "psalm must be an integer between 1 and 150" });
@@ -93,8 +98,38 @@ export async function POST(req: NextRequest) {
   const id = crypto.randomUUID();
   const createdAt = Date.now();
 
+  // Client IP + geo from Vercel's forwarding headers (x-forwarded-for is a
+  // comma-separated list; the client is the first entry). Logged as one JSON
+  // line so the Better Stack log drain can parse and filter it.
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    null;
+  const decode = (v: string | null) => {
+    if (!v) return null;
+    try {
+      return decodeURIComponent(v);
+    } catch {
+      return v;
+    }
+  };
   console.log(
-    `[generate] job=${id} psalm=${psalm} verses=${startVerse}-${endVerse}/${hebrew.length} variants=${variants} meter=${meter.id} model=${model.id}`
+    JSON.stringify({
+      event: "generation",
+      job: id,
+      psalm,
+      verseStart: startVerse,
+      verseEnd: endVerse,
+      verseCount: hebrew.length,
+      variants,
+      meter: meter.id,
+      style,
+      model: model.id,
+      provider: model.provider,
+      ip,
+      country: req.headers.get("x-vercel-ip-country") || null,
+      city: decode(req.headers.get("x-vercel-ip-city")),
+    })
   );
 
   // Seed the job so the client can start polling/streaming immediately, then

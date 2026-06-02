@@ -525,6 +525,7 @@ export function Psalter() {
           model,
           systemPrompt,
           meter: meterId,
+          style,
           verseStart: range?.start,
           verseEnd: range?.end,
         }),
