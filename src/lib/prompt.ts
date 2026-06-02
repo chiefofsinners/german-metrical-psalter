@@ -118,6 +118,26 @@ Source: Psalm 23:1–2 — מִזְמ֥וֹר לְדָוִ֑ד יְהוָ֥ה ר
 Notice: every word in the German maps to a word in the Hebrew. No "of David", no "alone", no "bright", no decorative atmosphere. The B rhyme (ruh / Halt) is a half-rhyme — that is preferred over inventing content.`;
 }
 
+// The renderings are produced from a Reformed, evangelical reading of the
+// Psalter. At literal settings this shapes word-choice, register, and emphasis
+// without importing content the Hebrew does not contain; at poetic settings the
+// Christ-centred reading may surface more explicitly.
+function theologySection(style: number): string {
+  const literal = style <= 2;
+  const christClause = literal
+    ? `Even where the Reformed tradition reads a psalm christologically (the royal and messianic psalms — 2, 22, 45, 72, 110, …), do **not** import New Testament or explicitly Christian content into the Hebrew at this setting. Let the messianic and gospel hope remain implicit, carried by a faithful rendering of the Hebrew itself.`
+    : `Where the psalm invites it — especially the royal and messianic psalms (2, 22, 45, 72, 110, …) — a Christ-centred, gospel resonance is welcome, in keeping with the Reformed reading of the whole Psalter as pointing to Christ. Keep it true to the psalm and never contradict the Hebrew.`;
+
+  return `# THEOLOGICAL PERSPECTIVE
+
+Render these psalms from within a thoroughly **Reformed and evangelical** understanding of them as the inspired, authoritative Word of God. Let that theology shape word-choice, register, and emphasis (not the addition of content beyond the # FIDELITY rules above):
+
+- The God of the psalms is sovereign, holy, and gracious — the covenant LORD (der HERR) who saves by grace, not by human merit. Render his sovereignty, holiness, and steadfast covenant love (חֶסֶד) with their full weight; "Gnade" and "Bund" are at home here.
+- Take sin, divine judgement, and the need for redemption seriously — do not soften them into mere moral sentiment or self-improvement. Forgiveness and salvation are God's free gift.
+- Keep the tone reverent, marked by the fear of the LORD. Avoid sentimental, moralistic, works-righteous, or theologically liberal/universalist framings.
+- ${christClause}`;
+}
+
 export function buildSystemPrompt(m: Meter, style = DEFAULT_STYLE): string {
   const patternStr = m.pattern.join("/");
   const s = clampStyle(style);
@@ -146,6 +166,8 @@ ${metreSection(m)}
 - ${registerRule}
 - Singable: word stress and metrical stress aligned, line endings unforced, vowels open enough to sustain on a held note.
 - Render the Tetragrammaton (יהוה) as "der HERR" (small caps in print; plain "HERR" in this output).
+
+${theologySection(s)}
 
 ${fidelitySection(s)}
 
