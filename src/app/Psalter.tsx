@@ -233,6 +233,14 @@ export function Psalter() {
     setRefError(false);
   }
 
+  // Clear the reference field and any verse range, falling back to the whole
+  // psalm. Leaves the selected psalm itself untouched.
+  function clearReference() {
+    setRefInput("");
+    setRange(null);
+    setRefError(false);
+  }
+
   // Copy the current (session) settings into localStorage so new tabs/sessions
   // start from them. The live session copy still governs edits in this tab.
   function saveAsDefaults() {
@@ -639,29 +647,56 @@ export function Psalter() {
               <label className="block text-xs text-stone-500 mb-1">
                 {t.referenceLabel}
               </label>
-              <input
-                type="text"
-                inputMode="text"
-                value={refInput}
-                onChange={(e) => {
-                  setRefInput(e.target.value);
-                  if (refError) setRefError(false);
-                }}
-                onBlur={(e) => applyReference(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    applyReference((e.target as HTMLInputElement).value);
-                  }
-                }}
-                placeholder={t.referencePlaceholder}
-                aria-invalid={refError}
-                className={`w-full rounded border px-2.5 py-1.5 text-sm tabular-nums bg-stone-50 dark:bg-stone-950 ${
-                  refError
-                    ? "border-red-400 dark:border-red-700"
-                    : "border-stone-300 dark:border-stone-700"
-                }`}
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  inputMode="text"
+                  value={refInput}
+                  onChange={(e) => {
+                    setRefInput(e.target.value);
+                    if (refError) setRefError(false);
+                  }}
+                  onBlur={(e) => applyReference(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      applyReference((e.target as HTMLInputElement).value);
+                    }
+                  }}
+                  placeholder={t.referencePlaceholder}
+                  aria-invalid={refError}
+                  className={`w-full rounded border py-1.5 pl-2.5 text-sm tabular-nums bg-stone-50 dark:bg-stone-950 ${
+                    refInput || range ? "pr-8" : "pr-2.5"
+                  } ${
+                    refError
+                      ? "border-red-400 dark:border-red-700"
+                      : "border-stone-300 dark:border-stone-700"
+                  }`}
+                />
+                {(refInput || range) && (
+                  <button
+                    type="button"
+                    onClick={clearReference}
+                    title={t.referenceClear}
+                    aria-label={t.referenceClear}
+                    className="absolute inset-y-0 right-0 flex items-center pr-2.5 pl-1 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="w-3.5 h-3.5"
+                      aria-hidden="true"
+                    >
+                      <path d="M18 6 6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
               {refError && (
                 <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                   {t.referenceInvalid}
