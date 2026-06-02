@@ -92,6 +92,8 @@ export function Psalter({ initial }: { initial: Prefs }) {
   );
   const [refInput, setRefInput] = useState("");
   const [refError, setRefError] = useState(false);
+  const [meterOpen, setMeterOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const [promptCustomized, setPromptCustomized] = useState(
     initial.promptCustomized
   );
@@ -427,7 +429,7 @@ export function Psalter({ initial }: { initial: Prefs }) {
               <button
                 key={l}
                 onClick={() => setLang(l)}
-                className={`px-2 py-1 transition-colors ${
+                className={`px-2.5 py-1.5 sm:px-2 sm:py-1 transition-colors ${
                   lang === l
                     ? "bg-stone-900 text-stone-50 dark:bg-stone-100 dark:text-stone-900"
                     : "text-stone-600 hover:bg-stone-200 dark:text-stone-400 dark:hover:bg-stone-800"
@@ -443,7 +445,7 @@ export function Psalter({ initial }: { initial: Prefs }) {
             onClick={openSettings}
             title={t.settings}
             aria-label={t.settings}
-            className="relative p-1.5 rounded text-stone-500 hover:bg-stone-200 hover:text-stone-900 dark:hover:bg-stone-800 dark:hover:text-stone-100 transition-colors"
+            className="relative p-2 sm:p-1.5 rounded text-stone-500 hover:bg-stone-200 hover:text-stone-900 dark:hover:bg-stone-800 dark:hover:text-stone-100 transition-colors"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -497,18 +499,18 @@ export function Psalter({ initial }: { initial: Prefs }) {
           </div>
         </section>
 
-        <aside className="lg:sticky lg:top-6 lg:self-start space-y-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 bg-white dark:bg-stone-900">
+        <aside className="lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden space-y-4 border border-stone-200 dark:border-stone-800 rounded-lg p-4 bg-white dark:bg-stone-900">
           <div>
             <label className="block text-sm mb-2">
               {t.psalmLabel}{" "}
               <span className="text-stone-400">— {psalm}</span>
             </label>
-            <div className="grid grid-cols-10 gap-0.5">
+            <div className="grid grid-cols-10 gap-1 sm:gap-0.5">
               {Array.from({ length: 150 }, (_, i) => i + 1).map((n) => (
                 <button
                   key={n}
                   onClick={() => selectPsalmFromGrid(n)}
-                  className={`text-[10px] py-1 rounded tabular-nums transition-colors ${
+                  className={`text-xs py-2 sm:text-[10px] sm:py-1 rounded tabular-nums transition-colors ${
                     n === psalm
                       ? "bg-stone-800 text-stone-50 dark:bg-stone-200 dark:text-stone-900"
                       : "text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
@@ -539,7 +541,7 @@ export function Psalter({ initial }: { initial: Prefs }) {
                 }}
                 placeholder={t.referencePlaceholder}
                 aria-invalid={refError}
-                className={`w-full rounded border px-2 py-1 text-sm tabular-nums bg-stone-50 dark:bg-stone-950 ${
+                className={`w-full rounded border px-2.5 py-1.5 text-sm tabular-nums bg-stone-50 dark:bg-stone-950 ${
                   refError
                     ? "border-red-400 dark:border-red-700"
                     : "border-stone-300 dark:border-stone-700"
@@ -552,6 +554,38 @@ export function Psalter({ initial }: { initial: Prefs }) {
               )}
             </div>
           </div>
+          {generating ? (
+            <button
+              onClick={cancel}
+              className="w-full py-2.5 sm:py-2 rounded border border-stone-300 text-stone-700 hover:bg-stone-900 hover:text-stone-50 hover:border-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:hover:border-stone-300 transition-colors"
+            >
+              {t.cancel} · {elapsed}s
+            </button>
+          ) : (
+            <button
+              onClick={generate}
+              className="w-full py-2.5 sm:py-2 rounded bg-stone-200 text-stone-900 hover:bg-stone-900 hover:text-stone-50 dark:bg-stone-700 dark:text-stone-50 dark:hover:bg-stone-300 dark:hover:text-stone-900 transition-colors"
+            >
+              {t.generate}
+            </button>
+          )}
+          {generating && (
+            <div className="h-1 w-full overflow-hidden rounded bg-stone-200 dark:bg-stone-800">
+              <div className="h-full w-1/3 bg-stone-800 dark:bg-stone-200 animate-indeterminate" />
+            </div>
+          )}
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          )}
+          {result?.meta?.usage && (
+            <p className="text-xs text-stone-400">
+              {t.usage(
+                result.meta.usage.input_tokens,
+                result.meta.usage.output_tokens,
+                result.meta.usage.cache_read_input_tokens
+              )}
+            </p>
+          )}
           <div>
             <label className="block text-sm mb-1">
               {t.variantsLabel(variantCount)}
@@ -571,30 +605,74 @@ export function Psalter({ initial }: { initial: Prefs }) {
             />
           </div>
           <div>
-            <label className="block text-sm mb-2">{t.meterLabel}</label>
-            <div className="flex flex-wrap gap-1">
-              {METERS.map((m) => {
-                const selected = m.id === meterId;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => selectMeter(m.id)}
-                    title={m.label}
-                    className={`text-xs px-2.5 py-1 rounded-full border tabular-nums transition-colors ${
-                      selected
-                        ? "bg-stone-900 text-stone-50 border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100"
-                        : "border-stone-300 text-stone-700 hover:border-stone-900 hover:text-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:border-stone-100 dark:hover:text-stone-100"
-                    }`}
-                  >
-                    {m.short}
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              onClick={() => setMeterOpen((o) => !o)}
+              className="flex w-full items-center gap-1.5 text-sm py-1"
+              aria-expanded={meterOpen}
+            >
+              <span
+                className={`inline-block text-stone-400 transition-transform ${
+                  meterOpen ? "rotate-90" : ""
+                }`}
+              >
+                ▸
+              </span>
+              <span>{t.meterLabel}</span>
+              {!meterOpen && (
+                <span className="ml-auto tabular-nums text-xs text-stone-500 dark:text-stone-300">
+                  {meter.short}
+                </span>
+              )}
+            </button>
+            {meterOpen && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {METERS.map((m) => {
+                  const selected = m.id === meterId;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => selectMeter(m.id)}
+                      title={m.label}
+                      className={`text-sm px-3 py-1.5 sm:text-xs sm:px-2.5 sm:py-1 rounded-full border tabular-nums transition-colors ${
+                        selected
+                          ? "bg-stone-900 text-stone-50 border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100"
+                          : "border-stone-300 text-stone-700 hover:border-stone-900 hover:text-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:border-stone-100 dark:hover:text-stone-100"
+                      }`}
+                    >
+                      {m.short}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div>
-            <label className="block text-sm mb-2">{t.modelLabel}</label>
-            <div className="space-y-1">
+            <button
+              onClick={() => setModelOpen((o) => !o)}
+              className="flex w-full items-center gap-1.5 text-sm py-1"
+              aria-expanded={modelOpen}
+            >
+              <span
+                className={`inline-block text-stone-400 transition-transform ${
+                  modelOpen ? "rotate-90" : ""
+                }`}
+              >
+                ▸
+              </span>
+              <span>{t.modelLabel}</span>
+              {!modelOpen && (
+                <span className="ml-auto max-w-[60%] truncate text-right text-xs text-stone-500 dark:text-stone-300">
+                  {(() => {
+                    const sel = models.find((m) => m.id === model);
+                    return sel
+                      ? `${PROVIDER_LABEL[sel.provider]} · ${sel.label}`
+                      : model;
+                  })()}
+                </span>
+              )}
+            </button>
+            {modelOpen && (
+            <div className="space-y-1 mt-2">
               {PROVIDER_ORDER.map((p) => {
                 const group = models.filter((m) => m.provider === p);
                 if (group.length === 0) return null;
@@ -611,7 +689,7 @@ export function Psalter({ initial }: { initial: Prefs }) {
                           return next;
                         })
                       }
-                      className="flex w-full items-center gap-1.5 text-left text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 py-1"
+                      className="flex w-full items-center gap-1.5 text-left text-[11px] sm:text-[10px] uppercase tracking-wider text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 py-1.5 sm:py-1"
                       aria-expanded={!collapsed}
                     >
                       <span
@@ -646,7 +724,7 @@ export function Psalter({ initial }: { initial: Prefs }) {
                                   ? t.missingKey(PROVIDER_LABEL[p])
                                   : m.id
                               }
-                              className={`text-left text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                              className={`text-left text-sm px-3 py-1.5 sm:text-xs sm:px-2.5 sm:py-1 rounded-full border transition-colors ${
                                 selected
                                   ? "bg-stone-900 text-stone-50 border-stone-900 dark:bg-stone-100 dark:text-stone-900 dark:border-stone-100"
                                   : disabled
@@ -664,39 +742,8 @@ export function Psalter({ initial }: { initial: Prefs }) {
                 );
               })}
             </div>
+            )}
           </div>
-          {generating ? (
-            <button
-              onClick={cancel}
-              className="w-full py-2 rounded border border-stone-300 text-stone-700 hover:bg-stone-900 hover:text-stone-50 hover:border-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:hover:border-stone-300 transition-colors"
-            >
-              {t.cancel} · {elapsed}s
-            </button>
-          ) : (
-            <button
-              onClick={generate}
-              className="w-full py-2 rounded bg-stone-200 text-stone-900 hover:bg-stone-900 hover:text-stone-50 dark:bg-stone-700 dark:text-stone-50 dark:hover:bg-stone-300 dark:hover:text-stone-900 transition-colors"
-            >
-              {t.generate}
-            </button>
-          )}
-          {generating && (
-            <div className="h-1 w-full overflow-hidden rounded bg-stone-200 dark:bg-stone-800">
-              <div className="h-full w-1/3 bg-stone-800 dark:bg-stone-200 animate-indeterminate" />
-            </div>
-          )}
-          {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          )}
-          {result?.meta?.usage && (
-            <p className="text-xs text-stone-400">
-              {t.usage(
-                result.meta.usage.input_tokens,
-                result.meta.usage.output_tokens,
-                result.meta.usage.cache_read_input_tokens
-              )}
-            </p>
-          )}
         </aside>
 
         <section className="min-w-0 space-y-6">
