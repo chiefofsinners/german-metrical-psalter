@@ -24,6 +24,7 @@ export const STRINGS = {
     generate: "Generate",
     generating: (s: number) => `Generating… ${s}s`,
     cancel: "Cancel",
+    cancelling: "Cancelling…",
     outputHeader: "German rendering",
     pressGenerate: (psalm: number, n: number) =>
       `Press Generate to render Psalm ${psalm} into ${n} version${n === 1 ? "" : "s"}.`,
@@ -78,6 +79,7 @@ export const STRINGS = {
     generate: "Erzeugen",
     generating: (s: number) => `Erzeuge… ${s}s`,
     cancel: "Abbrechen",
+    cancelling: "Breche ab…",
     outputHeader: "Deutsche Fassung",
     pressGenerate: (psalm: number, n: number) =>
       `Drücke „Erzeugen", um Psalm ${psalm} in ${n} Fassung${n === 1 ? "" : "en"} zu setzen.`,

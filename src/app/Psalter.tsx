@@ -128,6 +128,9 @@ export function Psalter() {
   const [hebrewLoading, setHebrewLoading] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [generating, setGenerating] = useState(false);
+  // True from when Cancel is pressed until the job actually reaches a terminal
+  // state — the worker may take a tick to see the flag.
+  const [cancelling, setCancelling] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [streamingText, setStreamingText] = useState("");
   const [reasoningCount, setReasoningCount] = useState(0);
@@ -380,6 +383,7 @@ export function Psalter() {
     if (ref) setSubmitted(ref);
 
     setGenerating(true);
+    setCancelling(false);
     setError(null);
     setResult(null);
     setStreamingText("");
@@ -397,6 +401,7 @@ export function Psalter() {
         activeJobRef.current = null;
         window.sessionStorage.removeItem(JOB_STORAGE_KEY);
         setGenerating(false);
+        setCancelling(false);
         if (elapsedTimer.current) {
           clearInterval(elapsedTimer.current);
           elapsedTimer.current = null;
@@ -479,12 +484,15 @@ export function Psalter() {
 
   async function cancel() {
     const id = activeJobRef.current;
-    if (!id) return;
+    if (!id || cancelling) return;
+    setCancelling(true);
     try {
       await fetch(`/api/job/${id}/cancel`, { method: "POST" });
     } catch {
       // The worker may still see the flag on its next tick; ignore network blips.
     }
+    // Stay in the cancelling state until the stream/poll observes the terminal
+    // status and stop() clears it.
   }
 
   async function generate() {
@@ -720,9 +728,10 @@ export function Psalter() {
           {generating ? (
             <button
               onClick={cancel}
-              className="w-full py-2.5 sm:py-2 rounded border border-stone-300 text-stone-700 hover:bg-stone-900 hover:text-stone-50 hover:border-stone-900 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:hover:border-stone-300 transition-colors"
+              disabled={cancelling}
+              className="w-full py-2.5 sm:py-2 rounded border border-stone-300 text-stone-700 hover:bg-stone-900 hover:text-stone-50 hover:border-stone-900 disabled:opacity-60 disabled:hover:bg-transparent disabled:hover:text-stone-700 disabled:hover:border-stone-300 disabled:cursor-default dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-300 dark:hover:text-stone-900 dark:hover:border-stone-300 dark:disabled:hover:bg-transparent dark:disabled:hover:text-stone-300 dark:disabled:hover:border-stone-700 transition-colors"
             >
-              {t.cancel} · {elapsed}s
+              {cancelling ? t.cancelling : t.cancel} · {elapsed}s
             </button>
           ) : (
             <button
@@ -999,9 +1008,10 @@ export function Psalter() {
                 </p>
                 <button
                   onClick={cancel}
-                  className="ml-auto shrink-0 text-xs text-stone-500 underline hover:text-stone-800 dark:hover:text-stone-200"
+                  disabled={cancelling}
+                  className="ml-auto shrink-0 text-xs text-stone-500 underline hover:text-stone-800 disabled:no-underline disabled:opacity-70 disabled:hover:text-stone-500 dark:hover:text-stone-200 dark:disabled:hover:text-stone-500"
                 >
-                  {t.cancel}
+                  {cancelling ? t.cancelling : t.cancel}
                 </button>
               </div>
               {streamingText.length > 0 && (
